@@ -52,6 +52,20 @@ struct ContentView: View {
             }
         }
         .searchable(text: $searchText, placement: .toolbar, prompt: "Search samples")
+        .background {
+            // Space toggles playback of the *currently* selected sample. This
+            // lives here (not on the detail pane's play button) because a
+            // keyboardShortcut registered inside DetailPane keeps the sample
+            // captured at registration time and would replay the wrong file.
+            Button("") {
+                if let s = selectedSample {
+                    player.togglePlay(url: s.url)
+                }
+            }
+            .keyboardShortcut(.space, modifiers: [])
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
         .toolbar { toolbarContent }
         .sheet(isPresented: $showLog) { logSheet }
         .alert("Analyzer runtime missing", isPresented: $runner.runtimeMissing) {

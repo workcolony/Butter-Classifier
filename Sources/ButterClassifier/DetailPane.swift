@@ -95,7 +95,7 @@ struct DetailPane: View {
                       ? "pause.fill" : "play.fill")
                     .frame(width: 18)
             }
-            .keyboardShortcut(.space, modifiers: [])
+            .help("Play/pause (Space)")
 
             Toggle(isOn: $player.isLooping) {
                 Image(systemName: "repeat")
