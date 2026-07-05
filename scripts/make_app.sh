@@ -59,7 +59,7 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "==> Copying analyzer script + Python runtime (this is the big part)..."
-cp python/analyzer/audio_analyzer.py "$APP_DIR/Contents/Resources/analyzer/"
+cp python/analyzer/*.py "$APP_DIR/Contents/Resources/analyzer/"
 cp -R Runtime/python "$APP_DIR/Contents/Resources/analyzer/python"
 
 echo "==> Ad-hoc signing..."
