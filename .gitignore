@@ -6,4 +6,5 @@ DerivedData/
 *.xcodeproj
 python/downloads/
 test-audio/
+**/*.iconset/
 __pycache__/

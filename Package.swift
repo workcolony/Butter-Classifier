@@ -11,7 +11,8 @@ let package = Package(
         .executableTarget(
             name: "ButterClassifier",
             dependencies: ["Yams"],
-            path: "Sources/ButterClassifier"
+            path: "Sources/ButterClassifier",
+            resources: [.copy("Resources/AppIcon.icns")]
         )
     ]
 )

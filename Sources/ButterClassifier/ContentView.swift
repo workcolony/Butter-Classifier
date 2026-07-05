@@ -16,11 +16,9 @@ struct ContentView: View {
     @State private var sortOrder = [KeyPathComparator(\SampleFile.name)]
     @State private var showLog = false
     @State private var bpmOverrideText = ""
-    @AppStorage("parallelWorkers") private var parallelWorkers = 4
+    @AppStorage("parallelWorkers") private var parallelWorkers = 0
 
-    /// Each worker holds librosa+essentia in memory (roughly 0.5-1 GB), so
-    /// cap at the machine's core count.
-    private var maxParallelWorkers: Int { ProcessInfo.processInfo.activeProcessorCount }
+    private var safeMaxParallel: Int { AnalysisSettings.safeMaxParallelWorkers }
 
     private var visibleSamples: [SampleFile] {
         var result = samples
@@ -79,7 +77,7 @@ struct ContentView: View {
             Text("The bundled Python runtime was not found. Rebuild the app, or run python/build_runtime.sh and set BUTTER_ANALYZER_DIR for development.")
         }
         .onAppear {
-            runner.maxWorkers = min(max(parallelWorkers, 1), maxParallelWorkers)
+            applyParallelWorkerSetting()
             runner.onFileFinished = { path in
                 refreshAnalyzedFile(path: path)
             }
@@ -87,7 +85,7 @@ struct ContentView: View {
             runner.warmUp()
         }
         .onChange(of: parallelWorkers) {
-            runner.maxWorkers = min(max(parallelWorkers, 1), maxParallelWorkers)
+            applyParallelWorkerSetting()
         }
     }
 
@@ -236,8 +234,8 @@ struct ContentView: View {
 
                 Divider()
 
-                Picker("Files in Parallel", selection: $parallelWorkers) {
-                    ForEach(workerCountOptions, id: \.self) { n in
+                Picker("Files in Parallel (max \(safeMaxParallel))", selection: $parallelWorkers) {
+                    ForEach(AnalysisSettings.parallelWorkerOptions(), id: \.self) { n in
                         Text("\(n)").tag(n)
                     }
                 }
@@ -273,13 +271,14 @@ struct ContentView: View {
         Double(bpmOverrideText.trimmingCharacters(in: .whitespaces))
     }
 
-    /// Sensible worker-count choices up to the machine's core count.
-    private var workerCountOptions: [Int] {
-        let candidates = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32]
-        var options = candidates.filter { $0 <= maxParallelWorkers }
-        if !options.contains(maxParallelWorkers) { options.append(maxParallelWorkers) }
-        if !options.contains(parallelWorkers) { options.append(parallelWorkers) }
-        return options.sorted()
+    /// Sensible worker-count choices up to the safe maximum.
+    private func applyParallelWorkerSetting() {
+        if parallelWorkers <= 0 {
+            parallelWorkers = AnalysisSettings.defaultParallelWorkers
+        } else {
+            parallelWorkers = AnalysisSettings.clamp(parallelWorkers)
+        }
+        runner.maxWorkers = parallelWorkers
     }
 
     private func enqueueUnanalyzed(inWatchedFolder watched: String?) {

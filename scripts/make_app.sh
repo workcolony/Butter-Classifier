@@ -20,6 +20,10 @@ if [ -d "/Applications/Xcode.app" ]; then
     export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 fi
 
+echo "==> Building app icon..."
+chmod +x scripts/build_icon.sh
+./scripts/build_icon.sh
+
 echo "==> Building Swift app (release)..."
 swift build -c release
 
@@ -28,6 +32,7 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources/analyzer"
 
 cp ".build/release/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
+cp "Sources/ButterClassifier/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -50,6 +55,8 @@ cat > "$APP_DIR/Contents/Info.plist" <<PLIST
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>14.0</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
