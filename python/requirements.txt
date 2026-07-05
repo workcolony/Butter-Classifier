@@ -1,0 +1,8 @@
+librosa
+essentia
+numpy
+scipy
+soundfile
+pyyaml
+wavinfo
+audioread
