@@ -6,6 +6,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 SOURCE="$PROJECT_DIR/BUTTER CLASS ICON.tiff"
+if [ ! -f "$SOURCE" ]; then
+    SOURCE="$PROJECT_DIR/Icon Work/BUTTER CLASS ICON.tiff"
+fi
 ICONSET="$PROJECT_DIR/Sources/ButterClassifier/Resources/AppIcon.iconset"
 OUT="$PROJECT_DIR/Sources/ButterClassifier/Resources/AppIcon.icns"
 

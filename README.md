@@ -9,7 +9,7 @@ The built app is fully self-contained: a relocatable Python runtime (with libros
 - **Library**: point the app at your sample folders (managed in place, nothing is copied or moved). Browse everything in a sortable, searchable table: duration, BPM, LUFS, kickiness, swing.
 - **Analysis**: run the analyzer on a file, folder, or the whole library, with live progress and a full output log. Files that already have a `.yaml` are skipped; re-analyze deletes the stale sidecar first. Optional BPM override.
   - Analysis runs on a pool of persistent Python workers: each worker pays the heavy librosa/essentia import cost (~1 min) once per app session, then analyzes files in a few seconds each. The first worker warms up in the background at app launch.
-  - "Files in Parallel" in the Analyze menu defaults to a safe maximum for your machine (the lesser of CPU core count and what RAM can support at ~800 MB per worker, with 10 GB reserved for the system). You can lower it there; it cannot exceed the safe cap.
+  - "Files in Parallel" in the Analyze menu defaults to a safe maximum for your machine. On Macs with 32 GB+ RAM this allows up to 2× your core count (workers often wait on disk I/O). Each worker uses roughly 600–800 MB once warm; the cap also respects available RAM.
   - If the app is run from a cloud-synced folder (iCloud/Synology/Dropbox under `~/Library/CloudStorage`), the analyzer runtime is mirrored once into `~/Library/Application Support/ButterClassifier/` and run from there — memory-mapped native libraries served by file providers intermittently segfault otherwise.
 - **Player**: waveform with analyzed onset markers, click-to-seek, loop playback.
 - **Editing** (non-destructive — always writes new files):
