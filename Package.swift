@@ -12,7 +12,13 @@ let package = Package(
             name: "ButterClassifier",
             dependencies: ["Yams"],
             path: "Sources/ButterClassifier",
-            resources: [.copy("Resources/AppIcon.icns")]
+            resources: [
+                .copy("Resources/AppIcon.icns"),
+                .copy("Resources/default-tagzone-preset.json"),
+                .copy("Resources/tag-token-rules.json"),
+                .copy("Resources/proc-routines.json"),
+                .copy("Resources/default-proc-presets.json"),
+            ]
         )
     ]
 )

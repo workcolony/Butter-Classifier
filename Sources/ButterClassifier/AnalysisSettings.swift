@@ -52,4 +52,11 @@ enum AnalysisSettings {
     static func clamp(_ value: Int) -> Int {
         min(max(value, 1), safeMaxParallelWorkers)
     }
+
+    /// Reads the saved parallel-worker preference, falling back to the default.
+    static func resolvedParallelWorkers() -> Int {
+        let stored = UserDefaults.standard.integer(forKey: "parallelWorkers")
+        if stored <= 0 { return defaultParallelWorkers }
+        return clamp(stored)
+    }
 }

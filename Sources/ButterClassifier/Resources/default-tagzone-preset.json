@@ -1,0 +1,225 @@
+{
+  "name": "everything",
+  "zones": [
+    {
+      "tags": [
+        "kik"
+      ],
+      "y": 0.206,
+      "h": 0.202
+    },
+    {
+      "tags": [
+        "bass"
+      ],
+      "y": 0.243,
+      "h": 0.091
+    },
+    {
+      "tags": [
+        "snare"
+      ],
+      "y": 0.328,
+      "h": 0.075
+    },
+    {
+      "tags": [
+        "drums"
+      ],
+      "y": 0.346,
+      "h": 0.158
+    },
+    {
+      "tags": [
+        "world",
+        "percussive"
+      ],
+      "y": 0.34,
+      "h": 0.1
+    },
+    {
+      "tags": [
+        "industrial",
+        "noisy"
+      ],
+      "y": 0.414,
+      "h": 0.2
+    },
+    {
+      "tags": [
+        "guitar",
+        "distorted"
+      ],
+      "y": 0.475,
+      "h": 0.14
+    },
+    {
+      "tags": [
+        "wah",
+        "brass"
+      ],
+      "y": 0.46,
+      "h": 0.1
+    },
+    {
+      "tags": [
+        "synth"
+      ],
+      "y": 0.457,
+      "h": 0.22
+    },
+    {
+      "tags": [
+        "keys"
+      ],
+      "y": 0.5,
+      "h": 0.22
+    },
+    {
+      "tags": [
+        "techno"
+      ],
+      "y": 0.55,
+      "h": 0.17
+    },
+    {
+      "tags": [
+        "edm"
+      ],
+      "y": 0.618,
+      "h": 0.155
+    },
+    {
+      "tags": [
+        "vocal"
+      ],
+      "y": 0.65,
+      "h": 0.18
+    },
+    {
+      "tags": [
+        "melody",
+        "polyphony"
+      ],
+      "y": 0.6,
+      "h": 0.14
+    },
+    {
+      "tags": [
+        "ambient"
+      ],
+      "y": 0.75,
+      "h": 0.1
+    },
+    {
+      "tags": [
+        "healing"
+      ],
+      "y": 0.65,
+      "h": 0.1
+    },
+    {
+      "tags": [
+        "sfx"
+      ],
+      "y": 0.852,
+      "h": 0.1
+    },
+    {
+      "tags": [
+        "top"
+      ],
+      "y": 0.75,
+      "h": 0.21
+    },
+    {
+      "tags": [
+        "sparse",
+        "stab"
+      ],
+      "y": 0.8,
+      "h": 0.21
+    },
+    {
+      "tags": [
+        "VOG"
+      ],
+      "y": 0.85,
+      "h": 0.11
+    },
+    {
+      "tags": [
+        "spoken"
+      ],
+      "y": 0.812,
+      "h": 0.234
+    },
+    {
+      "tags": [
+        "orchestral",
+        "woodwind"
+      ],
+      "y": 0.78,
+      "h": 0.16
+    },
+    {
+      "tags": [
+        "pad"
+      ],
+      "y": 0.8,
+      "h": 0.16
+    },
+    {
+      "tags": [
+        "Lo-Fi"
+      ],
+      "y": 0.666,
+      "h": 0.05
+    },
+    {
+      "tags": [
+        "repetitive"
+      ],
+      "y": 0.68,
+      "h": 0.07
+    },
+    {
+      "tags": [
+        "acoustic"
+      ],
+      "y": 0.578,
+      "h": 0.1
+    },
+    {
+      "tags": [
+        "robotic",
+        "not4",
+        "arhythmic"
+      ],
+      "y": 0.478,
+      "h": 0.105
+    }
+  ],
+  "axisWindows": {
+    "energy": {
+      "endW": 0.05,
+      "midW": 1,
+      "steepness": 1.6
+    },
+    "fame": {
+      "endW": 0.05,
+      "midW": 1,
+      "steepness": 1.6
+    },
+    "date": {
+      "endW": 0.05,
+      "midW": 1,
+      "steepness": 1.6
+    },
+    "bright": {
+      "endW": 0.05,
+      "midW": 1,
+      "steepness": 1.6
+    }
+  }
+}

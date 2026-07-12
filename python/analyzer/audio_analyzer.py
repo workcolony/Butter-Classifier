@@ -761,13 +761,13 @@ def analyze_directory_or_file(path, bpm_override=None, quick=False):
     if os.path.isdir(path):
         n = 0
         for filename in sorted(os.listdir(path)):
-            if filename.endswith(('.wav', '.mp3')):
+            if filename.lower().endswith(('.wav', '.mp3', '.aif', '.aiff')):
                 n += 1
                 filepath = os.path.join(path, filename)
                 yaml_filepath = filepath + '.yaml'
                 if not os.path.exists(yaml_filepath):
                     process_audio_file(filepath, yaml_filepath, n, bpm_override, quick)
-    elif os.path.isfile(path) and path.endswith(('.wav', '.mp3')):
+    elif os.path.isfile(path) and path.lower().endswith(('.wav', '.mp3', '.aif', '.aiff')):
         process_audio_file(path, path + '.yaml', None, bpm_override, quick)
     else:
         print_colorfully(f"Error: Path '{path}' is not a valid file or directory.", color='red')

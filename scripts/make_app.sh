@@ -34,6 +34,11 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources/analyzer"
 cp ".build/release/$APP_NAME" "$APP_DIR/Contents/MacOS/$APP_NAME"
 cp "Sources/ButterClassifier/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
 
+RESOURCE_BUNDLE=".build/release/${APP_NAME}_${APP_NAME}.bundle"
+if [ -d "$RESOURCE_BUNDLE" ]; then
+    cp "$RESOURCE_BUNDLE"/*.json "$APP_DIR/Contents/Resources/" 2>/dev/null || true
+fi
+
 cat > "$APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -69,8 +74,14 @@ echo "==> Copying analyzer script + Python runtime (this is the big part)..."
 cp python/analyzer/*.py "$APP_DIR/Contents/Resources/analyzer/"
 cp -R Runtime/python "$APP_DIR/Contents/Resources/analyzer/python"
 
+echo "==> Cleaning bytecode caches before signing..."
+find "$APP_DIR" -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+find "$APP_DIR" -name "*.pyc" -delete 2>/dev/null || true
+xattr -cr "$APP_DIR" 2>/dev/null || true
+
 echo "==> Ad-hoc signing..."
-codesign --force --deep -s - "$APP_DIR" 2>/dev/null || codesign --force -s - "$APP_DIR"
+codesign --force --sign - "$APP_DIR/Contents/MacOS/$APP_NAME"
+codesign --force --sign - "$APP_DIR"
 
 echo "==> Done: $APP_DIR"
 du -sh "$APP_DIR"

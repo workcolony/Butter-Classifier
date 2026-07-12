@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct ButterClassifierApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var analyzerRunner = AnalyzerRunner()
 
     let container: ModelContainer = {
         do {
@@ -34,9 +35,17 @@ struct ButterClassifierApp: App {
     var body: some Scene {
         WindowGroup("Butter Classifier") {
             ContentView()
+                .environmentObject(analyzerRunner)
                 .frame(minWidth: 1000, minHeight: 620)
+                .task {
+                    analyzerRunner.maxWorkers = AnalysisSettings.resolvedParallelWorkers()
+                    analyzerRunner.warmUp()
+                }
         }
         .modelContainer(container)
+        .commands {
+            InspectorCommands()
+        }
     }
 }
 
@@ -46,7 +55,7 @@ private func seedFoldersFromCommandLine(container: ModelContainer) {
     let args = CommandLine.arguments
     let context = container.mainContext
     for (i, arg) in args.enumerated() where arg == "--add-folder" && i + 1 < args.count {
-        let path = (args[i + 1] as NSString).expandingTildeInPath
+        let path = FolderURLResolver.resolvePath((args[i + 1] as NSString).expandingTildeInPath)
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else { continue }
         let existing = (try? context.fetch(FetchDescriptor<WatchedFolder>())) ?? []

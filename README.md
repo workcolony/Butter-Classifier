@@ -6,12 +6,16 @@ The built app is fully self-contained: a relocatable Python runtime (with libros
 
 ## Features
 
-- **Library**: point the app at your sample folders (managed in place, nothing is copied or moved). Browse everything in a sortable, searchable table: duration, BPM, LUFS, kickiness, swing.
+- **Tags**: read/write `sample.wav_tags.yaml` sidecars (LUP/gold_snds format). Edit tags in the detail pane.
+- **Tag Zones**: global preset editor (LUP lobby clone) — vertical depth bands, OR'd tags, axis windows. Toolbar → Tag Zones.
+- **Library finder**: LUP-style sample browser with glyph canvas, tag filters, axis pickers, play/select. Toolbar → Library.
 - **Analysis**: run the analyzer on a file, folder, or the whole library, with live progress and a full output log. Files that already have a `.yaml` are skipped; re-analyze deletes the stale sidecar first. Optional BPM override.
   - Analysis runs on a pool of persistent Python workers: each worker pays the heavy librosa/essentia import cost (~1 min) once per app session, then analyzes files in a few seconds each. The first worker warms up in the background at app launch.
   - "Files in Parallel" in the Analyze menu defaults to a safe maximum for your machine. On Macs with 32 GB+ RAM this allows up to 2× your core count (workers often wait on disk I/O). Each worker uses roughly 600–800 MB once warm; the cap also respects available RAM.
   - If the app is run from a cloud-synced folder (iCloud/Synology/Dropbox under `~/Library/CloudStorage`), the analyzer runtime is mirrored once into `~/Library/Application Support/ButterClassifier/` and run from there — memory-mapped native libraries served by file providers intermittently segfault otherwise.
 - **Player**: waveform with analyzed onset markers, click-to-seek, loop playback.
+- **PROC**: 16 routines in 7 groups (gain, filters, limiter, gate, clip, crush, tremolo, fade, delay, stutter, …). Script chains + 6 LUP preset chains. Toolbar → PROC.
+- **Classification editor**: Classify mode — drag onsets, draw loop braces on the waveform, override BPM/key. ⌘Z undoes onsets, loop, BPM, and key. Saves to `sample.wav_edits.yaml` (indexed in the library table). Re-analyze uses per-file BPM override from edits when the toolbar override is blank.
 - **Editing** (non-destructive — always writes new files):
   - Trim: drag a selection on the waveform, export it (with anti-click fades).
   - Slice at onsets: cut the file into per-onset WAVs in a `<name>_slices` folder.

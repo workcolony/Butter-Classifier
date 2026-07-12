@@ -1,0 +1,193 @@
+[
+  {
+    "id": "A1000001-0000-0000-0000-000000000001",
+    "name": "Pulverize",
+    "steps": [
+      { "routineID": "hpf", "params": { "cutoff": 180 } },
+      { "routineID": "lpf", "params": { "cutoff": 5500 } },
+      { "routineID": "gain", "params": { "db": -8 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000002",
+    "name": "Reverse Bloom",
+    "steps": [
+      { "routineID": "reverse", "params": {} },
+      { "routineID": "lpf", "params": { "cutoff": 9000 } },
+      { "routineID": "delay", "params": { "time": 220, "feedback": 0.4, "mix": 0.3 } },
+      { "routineID": "gain", "params": { "db": -4 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000003",
+    "name": "Mangle",
+    "steps": [
+      { "routineID": "gain", "params": { "db": 6 } },
+      { "routineID": "clip", "params": { "drive": 18 } },
+      { "routineID": "crush", "params": { "bits": 6 } },
+      { "routineID": "reverse", "params": {} },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000004",
+    "name": "Ring Mod",
+    "steps": [
+      { "routineID": "ringmod", "params": { "freq": 180, "mix": 1 } },
+      { "routineID": "clip", "params": { "drive": 10 } },
+      { "routineID": "bandpass", "params": { "low": 300, "high": 3200 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000005",
+    "name": "Stutter",
+    "steps": [
+      { "routineID": "stutter", "params": { "grain": 60, "repeats": 12, "start": 0 } },
+      { "routineID": "fade", "params": { "in": 2, "out": 8 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000006",
+    "name": "Spectral Smear",
+    "steps": [
+      { "routineID": "spectblur", "params": { "amount": 0.65, "mix": 0.9 } },
+      { "routineID": "lpf", "params": { "cutoff": 3000 } },
+      { "routineID": "delay", "params": { "time": 350, "feedback": 0.55, "mix": 0.45 } },
+      { "routineID": "reverse", "params": {} },
+      { "routineID": "fade", "params": { "in": 20, "out": 120 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000007",
+    "name": "Granular Dust",
+    "steps": [
+      { "routineID": "grain", "params": { "grain": 35, "density": 32, "mix": 0.8 } },
+      { "routineID": "hpf", "params": { "cutoff": 250 } },
+      { "routineID": "lpf", "params": { "cutoff": 4200 } },
+      { "routineID": "fade", "params": { "in": 5, "out": 40 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000008",
+    "name": "Glitch Walk",
+    "steps": [
+      { "routineID": "walk", "params": { "step": 90, "steps": 20, "fade": 6 } },
+      { "routineID": "crush", "params": { "bits": 7 } },
+      { "routineID": "ringmod", "params": { "freq": 90, "mix": 0.35 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000009",
+    "name": "Ghost Layer",
+    "steps": [
+      { "routineID": "combine", "params": { "offset": 120, "reverse": 1, "mix": 0.5 } },
+      { "routineID": "delay", "params": { "time": 280, "feedback": 0.45, "mix": 0.3 } },
+      { "routineID": "lpf", "params": { "cutoff": 6500 } },
+      { "routineID": "fade", "params": { "in": 15, "out": 200 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-00000000000A",
+    "name": "Telephone",
+    "steps": [
+      { "routineID": "bandpass", "params": { "low": 350, "high": 3400 } },
+      { "routineID": "crush", "params": { "bits": 10 } },
+      { "routineID": "clip", "params": { "drive": 8 } },
+      { "routineID": "gain", "params": { "db": 4 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-00000000000B",
+    "name": "Dub Echo",
+    "steps": [
+      { "routineID": "hpf", "params": { "cutoff": 140 } },
+      { "routineID": "delay", "params": { "time": 420, "feedback": 0.62, "mix": 0.55 } },
+      { "routineID": "tremolo", "params": { "rate": 4.5, "depth": 0.25 } },
+      { "routineID": "limit", "params": { "ceiling": -1 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-00000000000C",
+    "name": "Cecilia Degrade",
+    "steps": [
+      { "routineID": "degrade", "params": { "bits": 6, "rate": 0.25, "mirror": 0.7, "mix": 1 } },
+      { "routineID": "hpf", "params": { "cutoff": 200 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-00000000000D",
+    "name": "Phaser Swirl",
+    "steps": [
+      { "routineID": "phaser", "params": { "base": 600, "q": 0.8, "spread": 350, "stages": 6, "feedback": 0.4, "mix": 0.7 } },
+      { "routineID": "delay", "params": { "time": 160, "feedback": 0.3, "mix": 0.25 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-00000000000E",
+    "name": "Frequency Drift",
+    "steps": [
+      { "routineID": "freqshift", "params": { "shift": 55, "feedback": 0.35, "mix": 0.8 } },
+      { "routineID": "statevar", "params": { "cutoff": 2400, "q": 0.9, "mode": 2, "mix": 0.5 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-00000000000F",
+    "name": "Harmonic Cloud",
+    "steps": [
+      { "routineID": "harmonizer", "params": { "voice1": 12, "voice2": -7, "mix": 0.5 } },
+      { "routineID": "parameq", "params": { "freq": 900, "q": 1.4, "gain": 4 } },
+      { "routineID": "fade", "params": { "in": 20, "out": 180 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000010",
+    "name": "Vocoder Mask",
+    "steps": [
+      { "routineID": "vocoder", "params": { "bands": 16, "base": 180, "spread": 1.4, "q": 1.8, "mix": 0.9 } },
+      { "routineID": "waveshape", "params": { "drive": 10, "pre": 5000, "post": 7000, "mix": 0.4 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000011",
+    "name": "Spectral Gate Chop",
+    "steps": [
+      { "routineID": "spectralgate", "params": { "threshold": -32, "mix": 1 } },
+      { "routineID": "spectraldelay", "params": { "time": 90, "feedback": 0.45, "mix": 0.5 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000012",
+    "name": "Resonant Body",
+    "steps": [
+      { "routineID": "resonators", "params": { "base": 180, "detune": 0.55, "decay": 0.82, "mix": 0.7 } },
+      { "routineID": "lpf", "params": { "cutoff": 4800 } },
+      { "routineID": "fade", "params": { "in": 5, "out": 120 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  },
+  {
+    "id": "A1000001-0000-0000-0000-000000000013",
+    "name": "Particle Storm",
+    "steps": [
+      { "routineID": "particle", "params": { "grain": 40, "density": 48, "posRand": 0.75, "pitchRand": 120, "mix": 0.9 } },
+      { "routineID": "spectblur", "params": { "amount": 0.35, "mix": 0.5 } },
+      { "routineID": "normalize", "params": { "target": -0.3 } }
+    ]
+  }
+]
