@@ -37,9 +37,25 @@ sample.wav
 | `muscriptor/events.py` decoder fixes | **Yes** | Required for correct note output |
 | `tests/test_events.py` new cases | **Yes** | Regression guard in CI |
 | `transcription_model.py` / model load | **Via package** | Depend on `muscriptor` PyPI package + patches until upstream merges |
-| `web/src/audio.ts` playback | **No** | Reference only; Butter uses `AudioPlayer` |
+| `web/src/audio.ts` playback | **Later (Phase C′)** | Reference for synced WAV+MIDI preview; Phase A′ uses standalone MIDI only |
 | `ConditioningPanel` / `INSTRUMENT_IDS` | **Ideas** | Instrument names may inform tag suggestions (#2) |
 | Full React piano-roll UI | **Later** | Native SwiftUI canvas is a separate bet |
+
+---
+
+## Playback staging
+
+Transcription preview is split into three playback stages. Only the last stage needs tight WAV+MIDI sync.
+
+| Stage | Audio | MIDI | Sync |
+|-------|-------|------|------|
+| **Today** | `AudioPlayer` (WAV) | — | — |
+| **Phase A′** | `AudioPlayer` (unchanged) | `MidiPreviewPlayer` (new) | **None** — independent transports |
+| **Phase C′** | `TranscriptionPreviewEngine` (dual bus) | same notes, shared render clock | Tight sync, mix, stereo A/B |
+
+**Phase A′ use case:** transcribe a sample, then audition the MIDI on its own while normal waveform playback still uses the existing player. Enough to validate transcription quality by ear without investing in a unified clock or piano roll first.
+
+**Mutual exclusion (recommended):** starting MIDI preview pauses/stops `AudioPlayer`, and vice versa — avoids two unrelated streams at once. Unsynced overlay of both buses can be a later debug toggle, not the default.
 
 ---
 
@@ -59,6 +75,23 @@ sample.wav
 **User flow:** Context menu or detail action — "Transcribe to MIDI" (explicit, slow, GPU/CPU heavy).
 
 **Effort:** ~3–5 days (worker, bundling, HF token UX, error handling).
+
+### Phase A′ — Standalone MIDI preview (no audio sync)
+
+**Goal:** Play transcribed MIDI in-app while WAV playback stays on the existing `AudioPlayer` — two separate audition paths, no shared playhead.
+
+**Approach:**
+1. New `MidiPreviewPlayer` — `AVAudioEngine` + `AVAudioUnitSampler` + bundled SF2 (e.g. MuseScore General).
+2. Load from `sample.wav.mid` and/or `sample.wav_notes.yaml` (YAML preferred for instrument mute list).
+3. Swift models: `TranscriptionNote`, `TranscriptionResult`; port `InstrumentGMMap` and note-scheduling rules from spike `web/src/audio.ts` (warm channel, program change at note-on time) — **MIDI bus only**, no WAV node.
+4. Detail pane panel when sidecar exists: Play / Stop / seek scrubber, instrument list with mute, "Open .mid in Finder".
+5. Mutual exclusion with `AudioPlayer` on play (see Playback staging above).
+
+**Not in scope:** WAV/MIDI mix, stereo A/B, playhead locked to waveform, live note reveal synced to audio.
+
+**Depends on:** Phase A sidecar on disk.
+
+**Effort:** ~2–4 days on top of A (sampler, scheduler, minimal UI — no piano roll required).
 
 ### Phase B — Persistent transcription worker
 
@@ -87,6 +120,21 @@ sample.wav
 **Reference:** SSE event shape from `muscriptor/server.py` and local web `web/src/pianoroll.ts`.
 
 **Effort:** ~1–2 weeks (UI is the main cost).
+
+Piano roll can bind to `MidiPreviewPlayer.currentTime` for its own playhead; it does not need to match `AudioPlayer` until Phase C′.
+
+### Phase C′ — Synced WAV + MIDI preview
+
+**Goal:** A/B compare original audio against synthesized transcription on one timeline — mix slider, optional stereo split, no drift.
+
+**Approach:**
+1. New `TranscriptionPreviewEngine` — single `AVAudioEngine` with WAV bus (`AVAudioPlayerNode`) and MIDI bus (`AVAudioUnitSampler`), shared render-clock anchor (`AVAudioTime` / `lastRenderTime`, not wall clock).
+2. Port dual-bus scheduling from spike `web/src/audio.ts`: transport start drives both buses; rebuild note schedule on seek/play; `setMix` / `setStereo` equivalents.
+3. Replace or supplement Phase A′ controls when transcription tab is in "compare" mode; keep `AudioPlayer` for normal library audition outside that tab.
+
+**Depends on:** Phase A′ sampler/scheduling work proven; Phase C piano roll optional but natural host for compare UI.
+
+**Effort:** ~1 week on top of A′ + C (unified clock and dual-bus wiring — most `audio.ts` port effort lives here).
 
 ### Phase D — Instrument conditioning ↔ tags
 
@@ -127,23 +175,34 @@ sample.wav
 
 ## Swift touchpoints (future)
 
-| File | Change |
-|------|--------|
-| New `TranscriptionRunner.swift` | Worker pool, queue, progress (mirror `AnalyzerRunner`) |
-| `Models.swift` / SwiftData | `hasMidiTranscription`, paths, timestamps |
-| `DetailPane.swift` | "Transcribe" action, open MIDI in Finder, future piano roll |
-| `LibraryScanner.swift` | Discover `*.mid` sidecars, refresh index |
-| `tag-token-rules.json` | Optional mapping to MuScriptor instrument ids |
+| File | Phase | Change |
+|------|-------|--------|
+| `transcribe_worker.py` | A | MuScriptor API → `.mid` (+ optional `notes.yaml`) |
+| New `TranscriptionRunner.swift` | B | Worker pool, queue, progress (mirror `AnalyzerRunner`) |
+| `TranscriptionNote.swift`, `TranscriptionResult.swift` | A′ | Sidecar models; load/save `notes.yaml` |
+| `InstrumentGMMap.swift`, `NoteScheduler.swift` | A′ | GM programs, channel map, scheduled note-on/off |
+| New `MidiPreviewPlayer.swift` | A′ | Standalone MIDI audition (no WAV bus) |
+| `DetailPane.swift` | A′ | "Transcribe" action, MIDI preview panel, open in Finder |
+| `Models.swift` / SwiftData | A | `hasMidiTranscription`, paths, timestamps |
+| `LibraryScanner.swift` | A | Discover `*.mid` / `*_notes.yaml` sidecars, refresh index |
+| `PianoRollView.swift` | C | Read-only roll; own playhead from `MidiPreviewPlayer` |
+| New `TranscriptionPreviewEngine.swift` | C′ | Dual-bus synced preview (defer until A′ + C) |
+| `tag-token-rules.json` | D | Optional mapping to MuScriptor instrument ids |
+
+`AudioPlayer.swift` stays unchanged through Phase A′ and C; only Phase C′ introduces a separate unified engine for compare mode.
 
 ---
 
 ## Suggested order relative to ROADMAP
 
 1. Finish near-term ROADMAP items (#12, #8–11) — stable playback/FX baseline.
-2. **Phase A** transcription sidecar (this doc) — independent of MIDI keyboard (#14).
-3. ROADMAP #2 tag suggestions — synergizes with Phase D conditioning.
-4. **Phase C** piano roll UI — optional polish after sidecar exists.
-5. ROADMAP #14 MIDI keyboard — orthogonal; can precede or follow transcription.
+2. **Phase A** transcription sidecar — independent of MIDI keyboard (#14).
+3. **Phase A′** standalone MIDI preview — immediate in-app value from `.mid` without sync work.
+4. **Phase B** warm transcription worker (can overlap with A′).
+5. ROADMAP #2 tag suggestions — synergizes with Phase D conditioning.
+6. **Phase C** piano roll UI — optional; can use unsynced `MidiPreviewPlayer` playhead.
+7. **Phase C′** synced WAV+MIDI compare — when A/B audition matters.
+8. ROADMAP #14 MIDI keyboard — orthogonal; can precede or follow transcription.
 
 ---
 
@@ -151,5 +210,6 @@ sample.wav
 
 - [ ] Which model variant to bundle default (`small` for CPU app?)?
 - [ ] One-shot transcribe vs auto-transcribe on analyze?
-- [ ] Store MIDI only, or also `notes.yaml` for native UI?
+- [ ] Store MIDI only, or also `notes.yaml` for native UI? *(Recommend both: `.mid` for export, `notes.yaml` for mute list and piano roll.)*
+- [ ] Phase C′ timing: ship piano roll with unsynced preview first, or wait for synced engine?
 - [ ] Upstream PR status for `events.py` — track in LOCAL-PATCHES.md

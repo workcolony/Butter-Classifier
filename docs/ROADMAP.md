@@ -351,8 +351,10 @@ MIDIAction → AudioPlayer / SampleListNavigation / DetailPane
 | Phase | Scope |
 |-------|--------|
 | **A** | Batch transcribe → `sample.wav.mid` sidecar; subprocess or worker |
+| **A′** | Standalone `MidiPreviewPlayer` — audition MIDI in-app; `AudioPlayer` unchanged; no WAV/MIDI sync |
 | **B** | Persistent `TranscriptionRunner` (mirror `AnalyzerRunner`) |
-| **C** | Structured `notes.yaml` + in-app piano roll |
+| **C** | Structured `notes.yaml` + in-app piano roll (unsynced playhead OK) |
+| **C′** | Synced WAV+MIDI compare (`TranscriptionPreviewEngine`); mix, stereo A/B |
 | **D** | Tag ↔ instrument conditioning bidirectional |
 
 ### Sidecar
@@ -372,7 +374,7 @@ Decoder patches in `muscriptor/events.py` — without them, first notes at 5 s c
 - `small` variant realistic for CPU app bundle; larger variants optional download
 - PyTorch + muscriptor add significant bundle size
 
-**Effort:** Phase A ~3–5 days; full Phase C ~2–3 weeks.
+**Effort:** Phase A ~3–5 days; Phase A′ ~2–4 days on top of A; full Phase C ~2–3 weeks; Phase C′ ~1 week on top of A′ + C.
 
 **Depends on:** Stable analyze/playback UX (#8–11) recommended before heavy ML jobs in-app.
 
