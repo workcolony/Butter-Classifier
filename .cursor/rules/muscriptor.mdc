@@ -1,0 +1,19 @@
+---
+description: MuScriptor audio-to-MIDI transcription reference for Butter Classifier
+globs:
+  - docs/MUSCRIPTOR*.md
+  - Sources/**/Transcription*.swift
+  - scripts/**/transcribe*.py
+---
+
+# MuScriptor transcription work
+
+Before implementing audio → MIDI features, read:
+
+1. `docs/MUSCRIPTOR-REFERENCE.md` — API, models, instrument groups
+2. `docs/MUSCRIPTOR-INTEGRATION-PLAN.md` — phased rollout, sidecar design
+3. `../midi classifier/docs/LOCAL-PATCHES.md` on branch `local/butter-reference` — validated decoder fixes
+
+ROADMAP #17 is transcription (MuScriptor). ROADMAP #14 is MIDI keyboard input — different feature.
+
+Decoder patches in `muscriptor/events.py` are required for correct note output; do not depend on unpatched upstream for transcription.

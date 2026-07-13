@@ -2,7 +2,7 @@
 
 Living backlog of planned work. Phases 1–6 are complete; see [`LUP-ADAPTATION-PLAN.md`](LUP-ADAPTATION-PLAN.md) for shipped history.
 
-Last updated: 2026-07-11 (16 items)
+Last updated: 2026-07-13 (17 items)
 
 ---
 
@@ -17,7 +17,8 @@ flowchart TD
     E --> F[13 Spectrogram v1]
     F --> G[4 Script editor]
     G --> H[5 pygmu worker]
-    H --> I[14 MIDI integration]
+    H --> I[14 MIDI keyboard]
+    I --> J[17 MuScriptor transcription]
 ```
 
 | Priority | # | Item | Effort |
@@ -27,7 +28,7 @@ flowchart TD
 | Soon | 1 | Zero-crossing snap | ~1–2 days |
 | Then | 2 | Tag suggestions (instrument + genre) | ~1 week |
 | Medium | 3, 7, 13, 15, 16 | Library feel, add-folder verify, spectrogram, stereo overlay, Get Info | varies |
-| Later | 4, 5, 6, 14 | Script editor, pygmu, Tag Zones, MIDI | larger |
+| Later | 4, 5, 6, 14, 17 | Script editor, pygmu, Tag Zones, MIDI keyboard, audio→MIDI transcription | larger |
 
 ---
 
@@ -328,6 +329,53 @@ MIDIAction → AudioPlayer / SampleListNavigation / DetailPane
 
 **Depends on:** Solid playback UX (#8–11) before advanced MIDI/FX coupling.
 
+**Note:** This is MIDI *input* (keyboard/controller → Butter). For audio → MIDI *transcription*, see **#17**.
+
+---
+
+## 17. Audio → MIDI transcription (MuScriptor)
+
+**What:** Transcribe a sample's audio into multi-instrument MIDI using [MuScriptor](https://github.com/muscriptor/muscriptor) — note onsets/offsets with instrument group labels, written as a sidecar next to the WAV.
+
+**Why:** Enables melody/harmony inspection, MIDI export, and (later) instrument-aware tag suggestions. Complements analysis YAML (BPM, onsets, MFCCs) with full polyphonic pitch content.
+
+**Reference docs:**
+- [`MUSCRIPTOR-REFERENCE.md`](MUSCRIPTOR-REFERENCE.md) — API, models, instrument groups, local fork
+- [`MUSCRIPTOR-INTEGRATION-PLAN.md`](MUSCRIPTOR-INTEGRATION-PLAN.md) — phased rollout, sidecar design
+- Validated decoder fixes: `../midi classifier` branch `local/butter-reference`
+
+**Not the same as #14:** #14 is MIDI keyboard control of playback; #17 is machine transcription of audio content.
+
+### Phased rollout
+
+| Phase | Scope |
+|-------|--------|
+| **A** | Batch transcribe → `sample.wav.mid` sidecar; subprocess or worker |
+| **B** | Persistent `TranscriptionRunner` (mirror `AnalyzerRunner`) |
+| **C** | Structured `notes.yaml` + in-app piano roll |
+| **D** | Tag ↔ instrument conditioning bidirectional |
+
+### Sidecar
+
+| File | Owner | Purpose |
+|------|-------|---------|
+| `sample.wav.mid` | Transcription worker | Standard MIDI export |
+| `sample.wav_notes.yaml` *(optional)* | Transcription worker | Note events for native UI |
+
+### Must carry from local spike
+
+Decoder patches in `muscriptor/events.py` — without them, first notes at 5 s chunk boundaries and tie-prologue openings are dropped. See [`LOCAL-PATCHES.md`](../midi%20classifier/docs/LOCAL-PATCHES.md).
+
+### Packaging notes
+
+- Model weights: HuggingFace gated, CC BY-NC 4.0
+- `small` variant realistic for CPU app bundle; larger variants optional download
+- PyTorch + muscriptor add significant bundle size
+
+**Effort:** Phase A ~3–5 days; full Phase C ~2–3 weeks.
+
+**Depends on:** Stable analyze/playback UX (#8–11) recommended before heavy ML jobs in-app.
+
 ---
 
 ## 15. Stereo overlay waveform mode
@@ -506,5 +554,6 @@ From original plan — larger bets, not prioritized:
 9. **#4** Script editor Tier A+B
 10. **#5** pygmu audit + worker
 11. **#6** Tag Zones decision (after #2)
-12. **#14** MIDI v0 → v3
-13. **#7** Verify add-folder UX
+12. **#14** MIDI keyboard v0 → v3
+13. **#17** MuScriptor transcription Phase A → D (see integration plan)
+14. **#7** Verify add-folder UX

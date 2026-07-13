@@ -40,7 +40,9 @@ Still open: pygmu/CDP port, Monaco syntax highlighting.
 
 ## Phase 7+ — Roadmap
 
-See **[`ROADMAP.md`](ROADMAP.md)** for the full backlog (16 items as of 2026-07-11): zero-crossing snap, tag suggestions, Library LUP feel, PROC script editor, pygmu/CDP, tempo/key + FX coupling, spectrogram mode, stereo overlay waveform, Get Info inspector, MIDI integration, and more.
+See **[`ROADMAP.md`](ROADMAP.md)** for the full backlog (17 items as of 2026-07-13): zero-crossing snap, tag suggestions, Library LUP feel, PROC script editor, pygmu/CDP, tempo/key + FX coupling, spectrogram mode, stereo overlay waveform, Get Info inspector, MIDI keyboard integration, MuScriptor audio→MIDI transcription, and more.
+
+MuScriptor reference: [`MUSCRIPTOR-REFERENCE.md`](MUSCRIPTOR-REFERENCE.md), [`MUSCRIPTOR-INTEGRATION-PLAN.md`](MUSCRIPTOR-INTEGRATION-PLAN.md).
 
 ## Deferred (larger bets)
 
