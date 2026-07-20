@@ -14,7 +14,7 @@ struct DetailPane: View {
 
     @AppStorage("waveformMode") private var waveformModeRaw = WaveformMode.original.rawValue
     @AppStorage(WaveformColorTheme.storageKey) private var waveformThemeID = WaveformColorTheme.system.id
-    @AppStorage("waveformPaneHeight") private var storedWaveformPaneHeight = 130.0
+    @AppStorage("waveformPaneHeight") private var storedWaveformPaneHeight = 150.0
     @State private var liveWaveformHeight: CGFloat?
     @State private var renderModel: WaveformRenderModel = .empty
     @State private var keyboardHandler = EditorKeyboardHandler()
@@ -50,14 +50,10 @@ struct DetailPane: View {
         WaveformColorTheme.theme(id: waveformThemeID).resolved()
     }
 
-    private var waveformMinHeight: CGFloat {
-        switch waveformMode {
-        case .chromagram, .ribbon: return 150
-        default: return 130
-        }
-    }
+    /// Shared across all waveform modes so switching Orig/Super/Glass doesn't shrink the canvas.
+    private var waveformMinHeight: CGFloat { 150 }
 
-    private var waveformMaxHeight: CGFloat { waveformMinHeight * 4 }
+    private var waveformMaxHeight: CGFloat { 600 }
 
     private var displayWaveformHeight: CGFloat {
         let base = liveWaveformHeight ?? CGFloat(storedWaveformPaneHeight)
@@ -184,6 +180,16 @@ struct DetailPane: View {
             let quick = await WaveformRenderModel.loadWaveformOnly(url: url, mode: mode)
             guard !Task.isCancelled, sample.path == path else { return }
             renderModel = quick
+
+            if mode == .spectrogram {
+                // Let the list/scan breathe before the heavy Resonate pass.
+                try? await Task.sleep(nanoseconds: 30_000_000)
+                guard !Task.isCancelled, sample.path == path else { return }
+                let full = await WaveformRenderModel.loadSpectrogram(url: url)
+                guard !Task.isCancelled, sample.path == path else { return }
+                renderModel = full
+                return
+            }
 
             guard analyzed else { return }
             let full = await WaveformRenderModel.load(
@@ -542,6 +548,11 @@ struct DetailPane: View {
                     .font(.caption2)
                     .foregroundStyle(.orange)
                     .toolbarCluster()
+            } else if waveformMode.needsSpectrogram && !renderModel.hasSpectrogramData {
+                Text("Computing mel spectrogram…")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .toolbarCluster()
             }
             waveformZoomControls.toolbarCluster()
             waveformScrollControls.toolbarCluster()
@@ -556,24 +567,30 @@ struct DetailPane: View {
             set: { waveformModeRaw = $0.rawValue }
         )) {
             ForEach(WaveformMode.allCases) { mode in
-                Text(mode.label).tag(mode)
+                Text(mode.shortLabel).tag(mode)
             }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .help("Original: 1,200-bin overview. Supersample: 32,768-bin detail — zoom in to compare.")
+        .help("Original / Supersample / Glass / Chroma / Ribbon / Spec (Resonate Mel). Glass/Chroma/Ribbon need Analyze.")
     }
 
     private var waveformZoomControls: some View {
         HStack(spacing: 8) {
             Text("Zoom").font(.caption).foregroundStyle(.secondary)
-            Slider(value: $waveformZoom, in: 1...waveformMaxZoom, step: 1)
-                .frame(width: 120)
-                .help("Trackpad: pinch or scroll vertically to zoom; swipe sideways to pan when zoomed. Option/⌘+scroll also zooms. Max zoom scales with clip length.")
-            Text("\(Int(waveformZoom))×")
+            Slider(
+                value: Binding(
+                    get: { WaveformViewport.slider(fromZoom: waveformZoom, maxZoom: waveformMaxZoom) },
+                    set: { waveformZoom = WaveformViewport.zoom(fromSlider: $0, maxZoom: waveformMaxZoom) }
+                ),
+                in: 0...1
+            )
+            .frame(width: 120)
+            .help("Trackpad: pinch or scroll vertically to zoom; swipe sideways to pan when zoomed. Option/⌘+scroll also zooms. Slider is logarithmic — finer near 1×.")
+            Text(zoomLabel)
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .frame(width: 40, alignment: .leading)
+                .frame(width: 48, alignment: .leading)
             Button {
                 waveformZoom = 1
             } label: {
@@ -583,6 +600,13 @@ struct DetailPane: View {
             .help("Reset waveform zoom")
             .disabled(waveformZoom <= 1.01)
         }
+    }
+
+    private var zoomLabel: String {
+        if waveformZoom < 10 {
+            return String(format: "%.1f×", waveformZoom)
+        }
+        return "\(Int(waveformZoom.rounded()))×"
     }
 
     private var waveformScrollControls: some View {

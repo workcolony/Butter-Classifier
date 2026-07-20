@@ -7,6 +7,7 @@ enum WaveformMode: String, CaseIterable, Identifiable {
     case glass
     case chromagram
     case ribbon
+    case spectrogram
 
     var id: String { rawValue }
 
@@ -17,14 +18,32 @@ enum WaveformMode: String, CaseIterable, Identifiable {
         case .glass: return "Glass"
         case .chromagram: return "Chroma"
         case .ribbon: return "Ribbon"
+        case .spectrogram: return "Spectrogram"
+        }
+    }
+
+    /// Compact segmented-control labels (avoids toolbar wrap thrash).
+    var shortLabel: String {
+        switch self {
+        case .original: return "Orig"
+        case .supersample: return "Super"
+        case .glass: return "Glass"
+        case .chromagram: return "Chroma"
+        case .ribbon: return "Ribbon"
+        case .spectrogram: return "Spec"
         }
     }
 
     var needsAnalysis: Bool {
         switch self {
-        case .original, .supersample: return false
+        case .original, .supersample, .spectrogram: return false
         case .glass, .chromagram, .ribbon: return true
         }
+    }
+
+    /// Mel spectrogram is computed on-demand from audio (Resonate), not from YAML.
+    var needsSpectrogram: Bool {
+        self == .spectrogram
     }
 
     var waveformBins: Int {
@@ -58,6 +77,7 @@ struct WaveformRenderModel: Equatable {
     var chroma: [[Double]]
     /// HSL tuples aligned with chroma frames (hue 0–360).
     var chromaSmooth: [(hue: Double, saturation: Double, lightness: Double)]
+    var spectrogram: SpectrogramData
     var drawStats: WaveformDrawStats
 
     static let empty = WaveformRenderModel(
@@ -67,11 +87,16 @@ struct WaveformRenderModel: Equatable {
         spectralCentroids: [],
         chroma: [],
         chromaSmooth: [],
+        spectrogram: .empty,
         drawStats: WaveformDrawStats()
     )
 
     var hasSpectralData: Bool {
         !rms.isEmpty || !chroma.isEmpty
+    }
+
+    var hasSpectrogramData: Bool {
+        !spectrogram.isEmpty
     }
 
     static func == (lhs: WaveformRenderModel, rhs: WaveformRenderModel) -> Bool {
@@ -82,6 +107,12 @@ struct WaveformRenderModel: Equatable {
             && lhs.spectralCentroids.count == rhs.spectralCentroids.count
             && lhs.chroma.count == rhs.chroma.count
             && lhs.chromaSmooth.count == rhs.chromaSmooth.count
+            && lhs.spectrogram.frameCount == rhs.spectrogram.frameCount
+            && lhs.spectrogram.bandCount == rhs.spectrogram.bandCount
+            && lhs.spectrogram.hopSamples == rhs.spectrogram.hopSamples
+            && lhs.spectrogram.duration == rhs.spectrogram.duration
+            && lhs.spectrogram.minDB == rhs.spectrogram.minDB
+            && lhs.spectrogram.maxDB == rhs.spectrogram.maxDB
     }
 
     static func loadWaveformOnly(url: URL, mode: WaveformMode) async -> WaveformRenderModel {
@@ -94,6 +125,26 @@ struct WaveformRenderModel: Equatable {
             spectralCentroids: [],
             chroma: [],
             chromaSmooth: [],
+            spectrogram: .empty,
+            drawStats: WaveformDrawStats()
+        )
+    }
+
+    static func loadSpectrogram(url: URL) async -> WaveformRenderModel {
+        async let waveformTask = WaveformCache.shared.waveform(for: url, mode: .spectrogram)
+        async let spectrogramTask = WaveformCache.shared.spectrogram(for: url)
+        let waveform = await waveformTask
+        let spectrogram = await spectrogramTask ?? .empty
+        let duration = waveform.duration > 0 ? waveform.duration : 0
+        let resolvedDuration = spectrogram.duration > 0 ? spectrogram.duration : duration
+        return WaveformRenderModel(
+            duration: resolvedDuration,
+            waveform: waveform,
+            rms: [],
+            spectralCentroids: [],
+            chroma: [],
+            chromaSmooth: [],
+            spectrogram: spectrogram,
             drawStats: WaveformDrawStats()
         )
     }
@@ -104,6 +155,10 @@ struct WaveformRenderModel: Equatable {
         mode: WaveformMode,
         isAnalyzed: Bool
     ) async -> WaveformRenderModel {
+        if mode == .spectrogram {
+            return await loadSpectrogram(url: url)
+        }
+
         let waveform = await WaveformCache.shared.waveform(for: url, mode: mode)
         let duration = waveform.duration > 0 ? waveform.duration : 0
 
@@ -115,6 +170,7 @@ struct WaveformRenderModel: Equatable {
                 spectralCentroids: [],
                 chroma: [],
                 chromaSmooth: [],
+                spectrogram: .empty,
                 drawStats: WaveformDrawStats()
             )
         }
@@ -132,6 +188,7 @@ struct WaveformRenderModel: Equatable {
             spectralCentroids: spectral.spectralCentroids,
             chroma: spectral.chroma,
             chromaSmooth: spectral.chromaSmooth,
+            spectrogram: .empty,
             drawStats: drawStats
         )
     }

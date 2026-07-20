@@ -234,7 +234,7 @@ struct SampleTagsEditor: View {
                     Label("Suggest", systemImage: "sparkles")
                 }
                 .controlSize(.small)
-                .help("Refresh auto-tag suggestions from filename and analysis")
+                .help("Refresh auto-tag suggestions from filename, comments, and analysis")
             }
             if !displayedSuggestions.isEmpty {
                 HStack(spacing: 8) {

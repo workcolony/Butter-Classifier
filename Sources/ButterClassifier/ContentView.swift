@@ -40,6 +40,9 @@ struct ContentView: View {
     @State private var catalogTagCounts: [String: Int] = [:]
     @State private var catalogRefreshTask: Task<Void, Never>?
     @State private var libraryScanProgress: (completed: Int, total: Int)?
+    @State private var libraryHydrateProgress: (completed: Int, total: Int)?
+    /// True for the whole scan + hydrate window so list rebuilds don't thrash the UI.
+    @State private var isLibraryBusy = false
     @State private var bpmOverrideText = ""
     @State private var editorFocused = false
     @State private var keyboardRouter = EditorKeyboardRouter()
@@ -186,7 +189,11 @@ struct ContentView: View {
                 }
             }
             .onChange(of: focusedSampleID) { updateEditorKeyboardRouting() }
-            .onChange(of: samples.count) { _, _ in scheduleListRebuild() }
+            .onChange(of: samples.count) { _, _ in
+                // During scan/hydrate, defer rebuilds until the busy window ends.
+                guard !isLibraryBusy else { return }
+                scheduleListRebuild()
+            }
             .onChange(of: selectedSidebarID) { _, _ in scheduleListRebuild() }
             .onChange(of: sortOrder) { _, _ in scheduleListRebuild() }
             .onChange(of: searchText) { _, newValue in
@@ -441,6 +448,20 @@ struct ContentView: View {
                         .frame(width: 16)
                     Text("Loading files into library…")
                 }
+            } else if let hydrate = libraryHydrateProgress {
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                if hydrate.total > 0 {
+                    ProgressView(value: Double(hydrate.completed), total: Double(hydrate.total))
+                        .frame(width: 120)
+                    Text("Indexing \(hydrate.completed)/\(hydrate.total)")
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 16)
+                    Text("Indexing sidecars…")
+                }
             } else if runner.showsAnalyzerStatus {
                 Text("·")
                     .foregroundStyle(.tertiary)
@@ -505,18 +526,59 @@ struct ContentView: View {
     }
 
     private func rescanAsync(analyzeFolders: [String] = []) async {
+        isLibraryBusy = true
         libraryScanProgress = (0, 0)
-        await LibraryScanner.scanAll(
+        libraryHydrateProgress = nil
+        defer {
+            isLibraryBusy = false
+            libraryScanProgress = nil
+            libraryHydrateProgress = nil
+        }
+        var lastProgressAt = Date.distantPast
+        var lastPublished = -1
+        let dirtyPaths = await LibraryScanner.scanAll(
             context: context,
             tagPreset: tagZoneStore.selected,
             userVocabulary: tagVocabulary.tags,
             onProgress: { completed, total in
+                let now = Date()
+                let step = max(1, total / 40)
+                let due = completed == 0
+                    || completed == total
+                    || completed - lastPublished >= step
+                    || now.timeIntervalSince(lastProgressAt) >= 0.12
+                guard due else { return }
+                lastProgressAt = now
+                lastPublished = completed
                 libraryScanProgress = (completed, total)
             }
         )
+        // List is ready after the cheap index pass — don't wait on sidecar hydrate.
         libraryScanProgress = nil
         rebuildListRows()
         suggestionRevision += 1
+
+        if !dirtyPaths.isEmpty {
+            let paths = dirtyPaths
+            libraryHydrateProgress = (0, paths.count)
+            lastProgressAt = Date.distantPast
+            lastPublished = -1
+            await LibraryScanner.hydrateSidecars(context: context, paths: paths) { completed, total in
+                let now = Date()
+                let step = max(1, total / 40)
+                let due = completed == 0
+                    || completed == total
+                    || completed - lastPublished >= step
+                    || now.timeIntervalSince(lastProgressAt) >= 0.12
+                guard due else { return }
+                lastProgressAt = now
+                lastPublished = completed
+                libraryHydrateProgress = (completed, total)
+            }
+            libraryHydrateProgress = nil
+            rebuildListRows()
+            suggestionRevision += 1
+        }
 
         guard !analyzeFolders.isEmpty else { return }
         let folderSet = Set(analyzeFolders)
@@ -550,7 +612,6 @@ struct ContentView: View {
 
     private func handleAppear() {
         applyParallelWorkerSetting()
-        runner.warmUp()
         updateEditorKeyboardRouting()
         player.volume = Float(playbackVolume)
         player.resumeFromStopPosition = resumeFromStopPosition
@@ -564,6 +625,8 @@ struct ContentView: View {
             migrateHeavySampleFieldsIfNeeded()
             rebuildListRows()
             await rescanAsync()
+            // Warm analyzer workers after library settle so imports don't fight scan/hydrate.
+            runner.warmUp()
         }
     }
 

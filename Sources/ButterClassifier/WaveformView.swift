@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 /// Waveform display with playhead, onset markers, click-to-seek, drag-to-select,
-/// and LUP-style display modes (original, supersample, glass, chromagram, ribbon).
+/// and LUP-style display modes (original, supersample, glass, chromagram, ribbon, spectrogram).
 struct WaveformView: View {
     let mode: WaveformMode
     let theme: ResolvedWaveformTheme
@@ -57,6 +57,7 @@ struct WaveformView: View {
 
     private var effectiveMode: WaveformMode {
         if mode.needsAnalysis && !model.hasSpectralData { return .original }
+        if mode.needsSpectrogram && !model.hasSpectrogramData { return .original }
         return mode
     }
 

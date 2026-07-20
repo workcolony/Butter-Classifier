@@ -10,12 +10,13 @@ struct TagSuggestionItem: Codable, Hashable, Identifiable {
 }
 
 /// Suggests descriptive tags (instrument, family, feeling, energy) from filenames,
-/// audio analysis, and Tag Zone scalars. Never suggests tempo, key, or pack names.
+/// folder paths, embedded file INFO/comments, audio analysis, and Tag Zone scalars.
+/// Never suggests tempo, key, or pack names.
 enum TagSuggester {
     enum SuggestMode {
-        /// Filename + folder tokens only — cheap enough to run during library scan.
+        /// Filename + folder + embedded comment tokens — cheap enough for tag UI refresh.
         case metadataOnly
-        /// Filename, folder, audio heuristics, and Tag Zone axes.
+        /// Filename, folder, comments, audio heuristics, and Tag Zone axes.
         case full
     }
 
@@ -72,6 +73,7 @@ enum TagSuggester {
 
         merge(&scored, fromFilename(sample: sample, vocabulary: vocabulary))
         merge(&scored, fromFolders(sample: sample, vocabulary: vocabulary))
+        merge(&scored, fromFileComments(sample: sample, vocabulary: vocabulary))
 
         if mode == .full {
             if let analysis {
@@ -98,7 +100,8 @@ enum TagSuggester {
 
     static func isMetadataSource(_ source: String) -> Bool {
         let parts = source.split(separator: "+").map(String.init)
-        return !parts.isEmpty && parts.allSatisfy { $0 == "filename" || $0 == "folder" }
+        let metadataSources: Set<String> = ["filename", "folder", "comment"]
+        return !parts.isEmpty && parts.allSatisfy { metadataSources.contains($0) }
     }
 
     static func mergeStoredSuggestions(
@@ -155,6 +158,22 @@ enum TagSuggester {
             guard !isExcludedToken(token), !excluded.contains(token) else { continue }
             if let tag = matchToken(token, rules: rules, vocabulary: vocabulary) {
                 out.append(ScoredTag(tag: tag, confidence: 0.72, sources: ["folder"]))
+            }
+        }
+        return out
+    }
+
+    /// RIFF INFO / BEXT / AIFF annotations / ID3 comments / Finder comments.
+    private static func fromFileComments(sample: SampleFile, vocabulary: [String: String]) -> [ScoredTag] {
+        let text = AudioFileMetadataHints.clueText(forAudioPath: sample.path)
+        guard !text.isEmpty else { return [] }
+
+        let rules = loadTokenRules().tokens
+        var out: [ScoredTag] = []
+        for token in tokenize(text) {
+            guard !isExcludedToken(token) else { continue }
+            if let tag = matchToken(token, rules: rules, vocabulary: vocabulary) {
+                out.append(ScoredTag(tag: tag, confidence: 0.80, sources: ["comment"]))
             }
         }
         return out

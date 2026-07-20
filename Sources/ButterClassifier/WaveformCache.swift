@@ -10,12 +10,15 @@ struct CachedSpectralData {
 
 /// In-memory + on-disk cache for decoded waveform peaks and upsampled spectral data.
 /// Sidecar files live next to each sample, matching the YAML naming pattern:
-///   `sample.wav` → `sample.wav.yaml`, `sample.wav.wfc`, `sample.wav.sfc`
+///   `sample.wav` → `sample.wav.yaml`, `sample.wav.wfc`, `sample.wav.sfc`, `sample.wav.rsp`
 actor WaveformCache {
     static let shared = WaveformCache()
 
     private var waveformMemory: [String: WaveformData] = [:]
     private var spectralMemory: [String: (yamlModifiedAt: Date, data: CachedSpectralData)] = [:]
+    private var spectrogramMemory: [String: (audioModifiedAt: Date, data: SpectrogramData)] = [:]
+    /// Bump when spectrogram compute/format changes so in-memory entries invalidate.
+    private static let spectrogramAlgoVersion = 3
 
     func waveform(for url: URL, mode: WaveformMode) async -> WaveformData {
         switch mode {
@@ -28,6 +31,29 @@ actor WaveformCache {
         default:
             return await loadCanonicalWaveform(url: url)
         }
+    }
+
+    func spectrogram(for audioURL: URL) async -> SpectrogramData? {
+        let key = "\(audioURL.path)|rsp\(Self.spectrogramAlgoVersion)"
+        let audioModifiedAt = fileModificationDate(audioURL) ?? .distantPast
+        if let cached = spectrogramMemory[key], cached.audioModifiedAt == audioModifiedAt {
+            return cached.data
+        }
+
+        if let disk = readSpectrogramDiskCache(audioURL: audioURL) {
+            spectrogramMemory[key] = (audioModifiedAt: audioModifiedAt, data: disk)
+            return disk
+        }
+
+        let path = audioURL.path
+        let computed = await Task.detached(priority: .utility) {
+            try? ResonateSpectrogram.compute(url: URL(fileURLWithPath: path))
+        }.value
+        guard let computed, !computed.isEmpty else { return nil }
+
+        spectrogramMemory[key] = (audioModifiedAt: audioModifiedAt, data: computed)
+        writeSpectrogramDiskCache(audioURL: audioURL, data: computed)
+        return computed
     }
 
     func spectral(for yamlURL: URL, audioURL: URL) async -> CachedSpectralData? {
@@ -130,6 +156,10 @@ actor WaveformCache {
 
     private func spectralCacheURL(for audioURL: URL) -> URL {
         URL(fileURLWithPath: audioURL.path + ".sfc")
+    }
+
+    private func spectrogramCacheURL(for audioURL: URL) -> URL {
+        URL(fileURLWithPath: audioURL.path + ".rsp")
     }
 
     /// Previous cache location (`sample.wfc`) — migrated to `sample.wav.wfc` on read.
@@ -302,5 +332,79 @@ actor WaveformCache {
 
     private func appendFloats(_ values: [Float], to blob: inout Data) {
         values.withUnsafeBytes { blob.append(contentsOf: $0) }
+    }
+
+    // MARK: - Spectrogram disk cache (RSP1)
+
+    private func readSpectrogramDiskCache(audioURL: URL) -> SpectrogramData? {
+        let cacheURL = spectrogramCacheURL(for: audioURL)
+        guard let data = try? Data(contentsOf: cacheURL), data.count >= 48 else { return nil }
+        guard String(data: data.prefix(4), encoding: .ascii) == "RSP3" else { return nil }
+
+        let sourceMtime = data.withUnsafeBytes { $0.load(fromByteOffset: 4, as: TimeInterval.self) }
+        let audioMtime = fileModificationDate(audioURL)?.timeIntervalSince1970 ?? -1
+        guard abs(sourceMtime - audioMtime) < 0.001 else { return nil }
+
+        let duration = data.withUnsafeBytes { $0.load(fromByteOffset: 12, as: Double.self) }
+        let sampleRate = data.withUnsafeBytes { $0.load(fromByteOffset: 20, as: Double.self) }
+        let bandCount = Int(data.withUnsafeBytes { $0.load(fromByteOffset: 28, as: UInt32.self) })
+        let frameCount = Int(data.withUnsafeBytes { $0.load(fromByteOffset: 32, as: UInt32.self) })
+        let hopSamples = Int(data.withUnsafeBytes { $0.load(fromByteOffset: 36, as: UInt32.self) })
+        let minDB = data.withUnsafeBytes { $0.load(fromByteOffset: 40, as: Float.self) }
+        let maxDB = data.withUnsafeBytes { $0.load(fromByteOffset: 44, as: Float.self) }
+
+        guard bandCount > 0, bandCount <= 512,
+              frameCount > 0, frameCount <= 500_000 else { return nil }
+
+        let header = 48
+        let payload = bandCount * frameCount * MemoryLayout<Float>.size
+        guard data.count >= header + payload else { return nil }
+
+        var powers = [Float](repeating: 0, count: bandCount * frameCount)
+        data.withUnsafeBytes { ptr in
+            guard let base = ptr.baseAddress else { return }
+            powers.withUnsafeMutableBytes { dst in
+                guard let address = dst.baseAddress else { return }
+                memcpy(address, base.advanced(by: header), payload)
+            }
+        }
+
+        return SpectrogramData(
+            duration: duration,
+            sampleRate: sampleRate,
+            bandCount: bandCount,
+            frameCount: frameCount,
+            hopSamples: hopSamples,
+            powersDB: powers,
+            minDB: minDB,
+            maxDB: maxDB
+        )
+    }
+
+    private func writeSpectrogramDiskCache(audioURL: URL, data: SpectrogramData) {
+        guard !data.isEmpty,
+              data.powersDB.count == data.bandCount * data.frameCount else { return }
+
+        var blob = Data()
+        blob.append(contentsOf: Array("RSP3".utf8))
+        var mtime = fileModificationDate(audioURL)?.timeIntervalSince1970 ?? 0
+        var duration = data.duration
+        var sampleRate = data.sampleRate
+        var bandCount = UInt32(data.bandCount)
+        var frameCount = UInt32(data.frameCount)
+        var hopSamples = UInt32(data.hopSamples)
+        var minDB = data.minDB
+        var maxDB = data.maxDB
+        blob.append(Data(bytes: &mtime, count: MemoryLayout<TimeInterval>.size))
+        blob.append(Data(bytes: &duration, count: MemoryLayout<Double>.size))
+        blob.append(Data(bytes: &sampleRate, count: MemoryLayout<Double>.size))
+        blob.append(Data(bytes: &bandCount, count: MemoryLayout<UInt32>.size))
+        blob.append(Data(bytes: &frameCount, count: MemoryLayout<UInt32>.size))
+        blob.append(Data(bytes: &hopSamples, count: MemoryLayout<UInt32>.size))
+        blob.append(Data(bytes: &minDB, count: MemoryLayout<Float>.size))
+        blob.append(Data(bytes: &maxDB, count: MemoryLayout<Float>.size))
+        data.powersDB.withUnsafeBytes { blob.append(contentsOf: $0) }
+
+        try? blob.write(to: spectrogramCacheURL(for: audioURL), options: .atomic)
     }
 }

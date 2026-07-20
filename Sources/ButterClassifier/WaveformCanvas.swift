@@ -31,6 +31,22 @@ struct WaveformViewport: Equatable {
         return min(maxZoomCap, max(maxZoomFloor, needed))
     }
 
+    /// Maps slider position `t` ∈ [0, 1] → zoom with more travel near 1×.
+    static func zoom(fromSlider t: Double, maxZoom: Double) -> Double {
+        let maxZ = max(maxZoom, minZoom)
+        let clamped = min(1, max(0, t))
+        if maxZ <= minZoom { return minZoom }
+        return minZoom * pow(maxZ / minZoom, clamped)
+    }
+
+    /// Inverse of `zoom(fromSlider:maxZoom:)`.
+    static func slider(fromZoom zoom: Double, maxZoom: Double) -> Double {
+        let maxZ = max(maxZoom, minZoom)
+        let z = min(maxZ, max(minZoom, zoom))
+        if maxZ <= minZoom { return 0 }
+        return log(z / minZoom) / log(maxZ / minZoom)
+    }
+
     func contentX(for time: Double) -> CGFloat {
         CGFloat(time / max(duration, 0.0001)) * contentW
     }
@@ -117,6 +133,16 @@ struct WaveformCanvasLayer: View, Equatable {
                     visibleEnd: visibleEnd,
                     duration: duration
                 )
+            case .spectrogram:
+                Self.drawSpectrogram(
+                    ctx: ctx,
+                    size: size,
+                    theme: theme,
+                    model: model,
+                    visibleStart: visibleStart,
+                    visibleEnd: visibleEnd,
+                    duration: duration
+                )
             }
             if !onsets.isEmpty {
                 Self.drawOnsets(
@@ -139,6 +165,40 @@ struct WaveformCanvasLayer: View, Equatable {
     private static func timeToX(_ time: Double, size: CGSize, visibleStart: Double, visibleEnd: Double) -> CGFloat {
         let span = max(visibleEnd - visibleStart, 0.0001)
         return CGFloat((time - visibleStart) / span) * size.width
+    }
+
+    /// How a pixel column samples the time axis.
+    private enum ColumnSample {
+        /// Zoomed out: peak-aggregate inclusive frames (non-overlapping partitions).
+        case aggregate(start: Int, end: Int)
+        /// Zoomed in: linear blend between two adjacent frames.
+        case lerp(frame0: Int, frame1: Int, frac: Double)
+    }
+
+    /// Maps a pixel column onto source frames without gaps or overlapping bins.
+    private static func columnSample(
+        column: Int,
+        pixelColumns: Int,
+        startFrame: Int,
+        endFrame: Int
+    ) -> ColumnSample? {
+        let count = endFrame - startFrame + 1
+        guard count > 0, pixelColumns > 0, column >= 0, column < pixelColumns else { return nil }
+
+        if count >= pixelColumns {
+            let lo = startFrame + Int(floor(Double(column) * Double(count) / Double(pixelColumns)))
+            let hi = startFrame + Int(floor(Double(column + 1) * Double(count) / Double(pixelColumns))) - 1
+            let binStart = min(endFrame, max(startFrame, lo))
+            let binEnd = min(endFrame, max(binStart, hi))
+            return .aggregate(start: binStart, end: binEnd)
+        }
+
+        // Stretch / interpolate: continuous position across the visible frames.
+        let pos = (Double(column) + 0.5) / Double(pixelColumns) * Double(count - 1)
+        let i0 = min(count - 1, max(0, Int(floor(pos))))
+        let i1 = min(count - 1, i0 + 1)
+        let frac = pos - Double(i0)
+        return .lerp(frame0: startFrame + i0, frame1: startFrame + i1, frac: frac)
     }
 
     private static func drawClassicWaveform(
@@ -237,34 +297,60 @@ struct WaveformCanvasLayer: View, Equatable {
 
         let pixelColumns = max(1, Int(ceil(size.width)))
         let framesPerColumn = Double(count) / Double(pixelColumns)
-        let densityBoost = min(3.2, max(1.0, sqrt(framesPerColumn)))
+        let densityBoost = min(3.2, max(1.0, sqrt(max(framesPerColumn, 0.0001))))
         let columnW = size.width / CGFloat(pixelColumns)
 
         for column in 0..<pixelColumns {
-            let binStart = startFrame + Int(floor(Double(column) * framesPerColumn))
-            let binEnd = min(endFrame, startFrame + Int(floor(Double(column + 1) * framesPerColumn)) - 1)
-            guard binStart <= binEnd else { continue }
+            guard let sample = columnSample(
+                column: column,
+                pixelColumns: pixelColumns,
+                startFrame: startFrame,
+                endFrame: endFrame
+            ) else { continue }
 
-            let frame = dominantGlassFrame(model: model, from: binStart, through: binEnd)
+            let color: Color
+            switch sample {
+            case .aggregate(let lo, let hi):
+                color = glassColor(model: model, at: dominantGlassFrame(model: model, from: lo, through: hi))
+            case .lerp(let f0, let f1, let frac):
+                color = lerpedGlassColor(model: model, frame0: f0, frame1: f1, frac: frac)
+            }
+
             let tintOpacity = min(0.78, theme.glassTintOpacity * densityBoost)
             let x = CGFloat(column) * columnW
             let rect = CGRect(x: x, y: 0, width: max(1, columnW + 0.5), height: size.height)
-            let color = glassColor(model: model, at: frame)
             ctx.fill(Path(rect), with: .color(color.opacity(tintOpacity)))
         }
 
         let midY = size.height / 2
         var gloss = Path()
+        var glossStarted = false
         for column in 0..<pixelColumns {
-            let binStart = startFrame + Int(floor(Double(column) * framesPerColumn))
-            let binEnd = min(endFrame, startFrame + Int(floor(Double(column + 1) * framesPerColumn)) - 1)
-            guard binStart <= binEnd else { continue }
+            guard let sample = columnSample(
+                column: column,
+                pixelColumns: pixelColumns,
+                startFrame: startFrame,
+                endFrame: endFrame
+            ) else { continue }
+
+            let amp: CGFloat
+            switch sample {
+            case .aggregate(let lo, let hi):
+                amp = peakRMS(model: model, from: lo, through: hi)
+            case .lerp(let f0, let f1, let frac):
+                let a0 = peakRMS(model: model, from: f0, through: f0)
+                let a1 = peakRMS(model: model, from: f1, through: f1)
+                amp = a0 + (a1 - a0) * CGFloat(frac)
+            }
 
             let x = pixelColumns <= 1 ? size.width / 2 : (CGFloat(column) + 0.5) / CGFloat(pixelColumns) * size.width
-            let amp = peakRMS(model: model, from: binStart, through: binEnd)
             let y = midY - amp * size.height * 0.38
-            if column == 0 { gloss.move(to: CGPoint(x: x, y: y)) }
-            else { gloss.addLine(to: CGPoint(x: x, y: y)) }
+            if !glossStarted {
+                gloss.move(to: CGPoint(x: x, y: y))
+                glossStarted = true
+            } else {
+                gloss.addLine(to: CGPoint(x: x, y: y))
+            }
         }
         ctx.stroke(gloss, with: .color(theme.waveStroke.opacity(0.62)), lineWidth: 1.1)
     }
@@ -293,15 +379,23 @@ struct WaveformCanvasLayer: View, Equatable {
         drawChromaPitchGrid(ctx: ctx, size: size, rows: rows, theme: theme)
 
         let pixelColumns = max(1, Int(ceil(size.width)))
-        let framesPerColumn = Double(count) / Double(pixelColumns)
         let columnW = size.width / CGFloat(pixelColumns)
 
         for column in 0..<pixelColumns {
-            let binStart = startFrame + Int(floor(Double(column) * framesPerColumn))
-            let binEnd = min(endFrame, startFrame + Int(floor(Double(column + 1) * framesPerColumn)) - 1)
-            guard binStart <= binEnd else { continue }
+            guard let sample = columnSample(
+                column: column,
+                pixelColumns: pixelColumns,
+                startFrame: startFrame,
+                endFrame: endFrame
+            ) else { continue }
 
-            let energies = aggregatedChromaColumn(model: model, from: binStart, through: binEnd)
+            let energies: [Double]
+            switch sample {
+            case .aggregate(let lo, let hi):
+                energies = aggregatedChromaColumn(model: model, from: lo, through: hi)
+            case .lerp(let f0, let f1, let frac):
+                energies = lerpedChromaColumn(model: model, frame0: f0, frame1: f1, frac: frac)
+            }
             let normalized = normalizedChromaColumn(energies)
             let x = CGFloat(column) * columnW
             let rectW = max(1, columnW + 0.5)
@@ -328,8 +422,7 @@ struct WaveformCanvasLayer: View, Equatable {
             model: model,
             startFrame: startFrame,
             endFrame: endFrame,
-            pixelColumns: pixelColumns,
-            framesPerColumn: framesPerColumn
+            pixelColumns: pixelColumns
         )
 
         drawChromaAmplitudeOverlay(
@@ -339,8 +432,7 @@ struct WaveformCanvasLayer: View, Equatable {
             model: model,
             startFrame: startFrame,
             endFrame: endFrame,
-            pixelColumns: pixelColumns,
-            framesPerColumn: framesPerColumn
+            pixelColumns: pixelColumns
         )
     }
 
@@ -371,21 +463,41 @@ struct WaveformCanvasLayer: View, Equatable {
         model: WaveformRenderModel,
         startFrame: Int,
         endFrame: Int,
-        pixelColumns: Int,
-        framesPerColumn: Double
+        pixelColumns: Int
     ) {
         let rows = 12
         var contour = Path()
+        var started = false
         for column in 0..<pixelColumns {
-            let binStart = startFrame + Int(floor(Double(column) * framesPerColumn))
-            let binEnd = min(endFrame, startFrame + Int(floor(Double(column + 1) * framesPerColumn)) - 1)
-            guard binStart <= binEnd else { continue }
+            guard let sample = columnSample(
+                column: column,
+                pixelColumns: pixelColumns,
+                startFrame: startFrame,
+                endFrame: endFrame
+            ) else { continue }
 
-            let pitch = dominantPitchClass(model: model, from: binStart, through: binEnd)
+            let pitch: Double
+            switch sample {
+            case .aggregate(let lo, let hi):
+                pitch = Double(dominantPitchClass(model: model, from: lo, through: hi))
+            case .lerp(let f0, let f1, let frac):
+                let p0 = Double(dominantPitchClass(model: model, from: f0, through: f0))
+                let p1 = Double(dominantPitchClass(model: model, from: f1, through: f1))
+                // Shortest wrap on the 12-pitch circle.
+                var delta = p1 - p0
+                if delta > 6 { delta -= 12 }
+                if delta < -6 { delta += 12 }
+                pitch = p0 + delta * frac
+            }
+
             let x = pixelColumns <= 1 ? size.width / 2 : (CGFloat(column) + 0.5) / CGFloat(pixelColumns) * size.width
             let y = size.height - (CGFloat(pitch) + 0.5) / CGFloat(rows) * size.height
-            if column == 0 { contour.move(to: CGPoint(x: x, y: y)) }
-            else { contour.addLine(to: CGPoint(x: x, y: y)) }
+            if !started {
+                contour.move(to: CGPoint(x: x, y: y))
+                started = true
+            } else {
+                contour.addLine(to: CGPoint(x: x, y: y))
+            }
         }
         ctx.stroke(
             contour,
@@ -401,27 +513,69 @@ struct WaveformCanvasLayer: View, Equatable {
         model: WaveformRenderModel,
         startFrame: Int,
         endFrame: Int,
-        pixelColumns: Int,
-        framesPerColumn: Double
+        pixelColumns: Int
     ) {
         guard !model.rms.isEmpty else { return }
 
         var envelope = Path()
+        var started = false
         for column in 0..<pixelColumns {
-            let binStart = startFrame + Int(floor(Double(column) * framesPerColumn))
-            let binEnd = min(endFrame, startFrame + Int(floor(Double(column + 1) * framesPerColumn)) - 1)
-            guard binStart <= binEnd else { continue }
+            guard let sample = columnSample(
+                column: column,
+                pixelColumns: pixelColumns,
+                startFrame: startFrame,
+                endFrame: endFrame
+            ) else { continue }
+
+            let amp: CGFloat
+            switch sample {
+            case .aggregate(let lo, let hi):
+                amp = peakRMS(model: model, from: lo, through: hi)
+            case .lerp(let f0, let f1, let frac):
+                let a0 = peakRMS(model: model, from: f0, through: f0)
+                let a1 = peakRMS(model: model, from: f1, through: f1)
+                amp = a0 + (a1 - a0) * CGFloat(frac)
+            }
 
             let x = pixelColumns <= 1 ? size.width / 2 : (CGFloat(column) + 0.5) / CGFloat(pixelColumns) * size.width
-            let amp = peakRMS(model: model, from: binStart, through: binEnd)
             let y = size.height * (0.96 - amp * 0.18)
-            if column == 0 { envelope.move(to: CGPoint(x: x, y: y)) }
-            else { envelope.addLine(to: CGPoint(x: x, y: y)) }
+            if !started {
+                envelope.move(to: CGPoint(x: x, y: y))
+                started = true
+            } else {
+                envelope.addLine(to: CGPoint(x: x, y: y))
+            }
         }
         ctx.stroke(
             envelope,
             with: .color(theme.waveStroke.opacity(0.42)),
             style: StrokeStyle(lineWidth: 1.0, lineCap: .round, lineJoin: .round)
+        )
+    }
+
+    private static func lerpedChromaColumn(
+        model: WaveformRenderModel,
+        frame0: Int,
+        frame1: Int,
+        frac: Double
+    ) -> [Double] {
+        let a = aggregatedChromaColumn(model: model, from: frame0, through: frame0)
+        let b = aggregatedChromaColumn(model: model, from: frame1, through: frame1)
+        return zip(a, b).map { $0 + ($1 - $0) * frac }
+    }
+
+    private static func lerpedGlassColor(
+        model: WaveformRenderModel,
+        frame0: Int,
+        frame1: Int,
+        frac: Double
+    ) -> Color {
+        let c0 = glassRGB(model: model, at: frame0)
+        let c1 = glassRGB(model: model, at: frame1)
+        return Color(
+            red: c0.red + (c1.red - c0.red) * frac,
+            green: c0.green + (c1.green - c0.green) * frac,
+            blue: c0.blue + (c1.blue - c0.blue) * frac
         )
     }
 
@@ -513,7 +667,10 @@ struct WaveformCanvasLayer: View, Equatable {
             let c1 = (centroids[min(i + 1, centroids.count - 1)] - minC) / (maxC - minC)
             let y0 = size.height * (0.88 - 0.76 * CGFloat(c0))
             let y1 = size.height * (0.88 - 0.76 * CGFloat(c1))
-            let w0 = CGFloat((model.rms[safe: i] ?? 0) / maxR) * 10 + 2
+            // Thick at low pitch (bottom), thin at high pitch (top); RMS adds a lighter pulse.
+            let lowBias = pow(max(0, 1 - c0), 1.6)
+            let rmsNorm = (model.rms[safe: i] ?? 0) / maxR
+            let w0 = CGFloat(1.2 + lowBias * 18 + rmsNorm * 4)
             let pitch0 = LibraryFeatures.pitchScalar(fromCentroid: centroids[i])
             let rgb = LibraryFeatures.color(forPitch: pitch0)
 
@@ -525,6 +682,108 @@ struct WaveformCanvasLayer: View, Equatable {
                 with: .color(Color(red: rgb.red, green: rgb.green, blue: rgb.blue).opacity(0.85)),
                 style: StrokeStyle(lineWidth: w0, lineCap: .round, lineJoin: .round)
             )
+        }
+    }
+
+    private static func drawSpectrogram(
+        ctx: GraphicsContext,
+        size: CGSize,
+        theme: ResolvedWaveformTheme,
+        model: WaveformRenderModel,
+        visibleStart: Double,
+        visibleEnd: Double,
+        duration: Double
+    ) {
+        let spec = model.spectrogram
+        guard !spec.isEmpty, duration > 0 else {
+            drawClassicWaveform(
+                ctx: ctx,
+                size: size,
+                theme: theme,
+                model: model,
+                visibleStart: visibleStart,
+                visibleEnd: visibleEnd,
+                duration: duration,
+                filled: true,
+                detailed: false
+            )
+            return
+        }
+
+        ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(theme.background))
+
+        let frames = spec.frameCount
+        let bands = spec.bandCount
+        let startFrame = max(0, min(frames - 1, Int(floor(visibleStart / duration * Double(frames)))))
+        let endFrame = max(startFrame, min(frames - 1, Int(ceil(visibleEnd / duration * Double(frames)))))
+        let frameSpan = endFrame - startFrame + 1
+        guard frameSpan > 0 else { return }
+
+        let pixelColumns = max(1, Int(ceil(size.width)))
+        let columnW = size.width / CGFloat(pixelColumns)
+
+        // Vertical LOD: aggregate Mel bands into display rows when viewport is short.
+        let displayRows = min(bands, max(48, Int(ceil(size.height))))
+        let rowH = size.height / CGFloat(displayRows)
+
+        let minDB = Double(spec.minDB)
+        let maxDB = Double(max(spec.maxDB, spec.minDB + 1))
+        let dbSpan = max(maxDB - minDB, 1)
+        let map = theme.spectrogramColormap
+
+        for column in 0..<pixelColumns {
+            guard let sample = columnSample(
+                column: column,
+                pixelColumns: pixelColumns,
+                startFrame: startFrame,
+                endFrame: endFrame
+            ) else { continue }
+
+            let x = CGFloat(column) * columnW
+            let rectW = max(1, columnW + 0.5)
+
+            for row in 0..<displayRows {
+                // Continuous Mel position with vertical lerp for smoother zoom.
+                let bandPos = (Double(row) + 0.5) / Double(displayRows) * Double(bands - 1)
+                let b0 = min(bands - 1, max(0, Int(floor(bandPos))))
+                let b1 = min(bands - 1, b0 + 1)
+                let bandFrac = bandPos - Double(b0)
+
+                let peakDB: Float
+                switch sample {
+                case .aggregate(let lo, let hi):
+                    // Mean over the time bin — max aggregation turns every transient
+                    // into a full-height vertical stripe when zoomed out.
+                    var sum: Float = 0
+                    var count = 0
+                    for frame in lo...hi {
+                        let v0 = spec.powersDB[frame * bands + b0]
+                        let v1 = spec.powersDB[frame * bands + b1]
+                        sum += v0 + Float(bandFrac) * (v1 - v0)
+                        count += 1
+                    }
+                    peakDB = count > 0 ? sum / Float(count) : Float(minDB)
+                case .lerp(let f0, let f1, let frac):
+                    let a0 = spec.powersDB[f0 * bands + b0]
+                    let a1 = spec.powersDB[f0 * bands + b1]
+                    let c0 = a0 + Float(bandFrac) * (a1 - a0)
+                    let d0 = spec.powersDB[f1 * bands + b0]
+                    let d1 = spec.powersDB[f1 * bands + b1]
+                    let c1 = d0 + Float(bandFrac) * (d1 - d0)
+                    peakDB = c0 + Float(frac) * (c1 - c0)
+                }
+
+                guard peakDB > Float(minDB) + 0.5 else { continue }
+
+                let t = (Double(peakDB) - minDB) / dbSpan
+                let rgb = map.rgb(at: t)
+                let y = size.height - CGFloat(row + 1) * rowH
+                let rect = CGRect(x: x, y: y, width: rectW, height: rowH + 0.5)
+                ctx.fill(
+                    Path(rect),
+                    with: .color(Color(red: rgb.red, green: rgb.green, blue: rgb.blue))
+                )
+            }
         }
     }
 
@@ -565,19 +824,22 @@ struct WaveformCanvasLayer: View, Equatable {
     }
 
     private static func glassColor(model: WaveformRenderModel, at frame: Int) -> Color {
-        let rgb: (red: Double, green: Double, blue: Double)
+        let rgb = glassRGB(model: model, at: frame)
+        return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
+    }
+
+    private static func glassRGB(model: WaveformRenderModel, at frame: Int) -> (red: Double, green: Double, blue: Double) {
         if frame < model.chromaSmooth.count {
             let hsl = model.chromaSmooth[frame]
             let saturation = min(1, hsl.saturation * 1.28 + 0.14)
             let lightness = min(0.68, hsl.lightness * 0.72 + 0.10)
-            rgb = hslToRgb(h: hsl.hue / 360, s: saturation, l: lightness)
-        } else if frame < model.chroma.count, let maxPitch = model.chroma[frame].enumerated().max(by: { $0.element < $1.element })?.offset {
-            rgb = chromaPitchColor(pitchClass: maxPitch, strength: 1)
-        } else {
-            let pitch = LibraryFeatures.pitchScalar(fromCentroid: model.spectralCentroids[safe: frame] ?? 2000)
-            rgb = LibraryFeatures.color(forPitch: pitch)
+            return hslToRgb(h: hsl.hue / 360, s: saturation, l: lightness)
         }
-        return Color(red: rgb.red, green: rgb.green, blue: rgb.blue)
+        if frame < model.chroma.count, let maxPitch = model.chroma[frame].enumerated().max(by: { $0.element < $1.element })?.offset {
+            return chromaPitchColor(pitchClass: maxPitch, strength: 1)
+        }
+        let pitch = LibraryFeatures.pitchScalar(fromCentroid: model.spectralCentroids[safe: frame] ?? 2000)
+        return LibraryFeatures.color(forPitch: pitch)
     }
 
     private static func dominantGlassFrame(model: WaveformRenderModel, from start: Int, through end: Int) -> Int {

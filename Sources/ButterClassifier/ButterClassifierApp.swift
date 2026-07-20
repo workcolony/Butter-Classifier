@@ -39,7 +39,6 @@ struct ButterClassifierApp: App {
                 .frame(minWidth: 1000, minHeight: 620)
                 .task {
                     analyzerRunner.maxWorkers = AnalysisSettings.resolvedParallelWorkers()
-                    analyzerRunner.warmUp()
                 }
         }
         .modelContainer(container)
