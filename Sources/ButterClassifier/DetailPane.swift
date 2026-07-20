@@ -903,11 +903,25 @@ private struct DetailPaneControls: View {
             }
             .help("Play/pause (Space)")
 
+            Toggle(isOn: $player.isReversed) {
+                Image(systemName: "backward.fill")
+            }
+            .toggleStyle(.button)
+            .help("Reverse playback direction")
+
             Toggle(isOn: $player.isLooping) {
                 Image(systemName: "repeat")
             }
             .toggleStyle(.button)
             .help("Loop playback (green loop braces, or selection if no loop braces)")
+
+            Toggle(isOn: $player.isRecursiveLooping) {
+                Image(systemName: "arrow.left.arrow.right")
+            }
+            .toggleStyle(.button)
+            .disabled(!player.isLooping)
+            .opacity(player.isLooping ? 1 : 0.4)
+            .help("Recursive loop: bounce back and forth gaplessly at each loop boundary (requires Loop)")
 
             Toggle(isOn: Binding(
                 get: { !resumeFromStopPosition },
