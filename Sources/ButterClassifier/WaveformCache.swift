@@ -10,7 +10,7 @@ struct CachedSpectralData {
 
 /// In-memory + on-disk cache for decoded waveform peaks and upsampled spectral data.
 /// Sidecar files live next to each sample, matching the YAML naming pattern:
-///   `sample.wav` → `sample.wav.yaml`, `sample.wav.wfc`, `sample.wav.sfc`, `sample.wav.rsp`
+///   `sample.wav` → `sample.wav.yaml`, `sample.wav.wfc`, `sample.wav.sfc`, `sample.wav.stf`
 actor WaveformCache {
     static let shared = WaveformCache()
 
@@ -18,7 +18,7 @@ actor WaveformCache {
     private var spectralMemory: [String: (yamlModifiedAt: Date, data: CachedSpectralData)] = [:]
     private var spectrogramMemory: [String: (audioModifiedAt: Date, data: SpectrogramData)] = [:]
     /// Bump when spectrogram compute/format changes so in-memory entries invalidate.
-    private static let spectrogramAlgoVersion = 3
+    private static let spectrogramAlgoVersion = 4
 
     func waveform(for url: URL, mode: WaveformMode) async -> WaveformData {
         switch mode {
@@ -34,7 +34,7 @@ actor WaveformCache {
     }
 
     func spectrogram(for audioURL: URL) async -> SpectrogramData? {
-        let key = "\(audioURL.path)|rsp\(Self.spectrogramAlgoVersion)"
+        let key = "\(audioURL.path)|stf\(Self.spectrogramAlgoVersion)"
         let audioModifiedAt = fileModificationDate(audioURL) ?? .distantPast
         if let cached = spectrogramMemory[key], cached.audioModifiedAt == audioModifiedAt {
             return cached.data
@@ -47,13 +47,21 @@ actor WaveformCache {
 
         let path = audioURL.path
         let computed = await Task.detached(priority: .utility) {
-            try? ResonateSpectrogram.compute(url: URL(fileURLWithPath: path))
+            try? STFTSpectrogram.compute(url: URL(fileURLWithPath: path))
         }.value
         guard let computed, !computed.isEmpty else { return nil }
 
         spectrogramMemory[key] = (audioModifiedAt: audioModifiedAt, data: computed)
         writeSpectrogramDiskCache(audioURL: audioURL, data: computed)
         return computed
+    }
+
+    /// Ensure canonical waveform (`.wfc`) and Mel STFT spectrogram (`.stf`) sidecars exist.
+    /// Fast no-op when disk caches are already valid.
+    func precomputeWaveformAndSpectrogram(for audioURL: URL) async {
+        async let wave: WaveformData = waveform(for: audioURL, mode: .original)
+        async let spec: SpectrogramData? = spectrogram(for: audioURL)
+        _ = await (wave, spec)
     }
 
     func spectral(for yamlURL: URL, audioURL: URL) async -> CachedSpectralData? {
@@ -159,7 +167,7 @@ actor WaveformCache {
     }
 
     private func spectrogramCacheURL(for audioURL: URL) -> URL {
-        URL(fileURLWithPath: audioURL.path + ".rsp")
+        URL(fileURLWithPath: audioURL.path + ".stf")
     }
 
     /// Previous cache location (`sample.wfc`) — migrated to `sample.wav.wfc` on read.
@@ -334,12 +342,12 @@ actor WaveformCache {
         values.withUnsafeBytes { blob.append(contentsOf: $0) }
     }
 
-    // MARK: - Spectrogram disk cache (RSP1)
+    // MARK: - Spectrogram disk cache (STF1 — Mel STFT)
 
     private func readSpectrogramDiskCache(audioURL: URL) -> SpectrogramData? {
         let cacheURL = spectrogramCacheURL(for: audioURL)
         guard let data = try? Data(contentsOf: cacheURL), data.count >= 48 else { return nil }
-        guard String(data: data.prefix(4), encoding: .ascii) == "RSP3" else { return nil }
+        guard String(data: data.prefix(4), encoding: .ascii) == "STF1" else { return nil }
 
         let sourceMtime = data.withUnsafeBytes { $0.load(fromByteOffset: 4, as: TimeInterval.self) }
         let audioMtime = fileModificationDate(audioURL)?.timeIntervalSince1970 ?? -1
@@ -386,7 +394,7 @@ actor WaveformCache {
               data.powersDB.count == data.bandCount * data.frameCount else { return }
 
         var blob = Data()
-        blob.append(contentsOf: Array("RSP3".utf8))
+        blob.append(contentsOf: Array("STF1".utf8))
         var mtime = fileModificationDate(audioURL)?.timeIntervalSince1970 ?? 0
         var duration = data.duration
         var sampleRate = data.sampleRate

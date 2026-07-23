@@ -2,7 +2,7 @@
 
 Living backlog of planned work. Phases 1–6 are complete; see [`LUP-ADAPTATION-PLAN.md`](LUP-ADAPTATION-PLAN.md) for shipped history.
 
-Last updated: 2026-07-13 (17 items)
+Last updated: 2026-07-23 (17 items; #13 Mel STFT v1 shipped)
 
 ---
 
@@ -214,34 +214,28 @@ HStack(alignment: .top, spacing: 8) {
 
 ## 13. Spectrogram waveform mode
 
-**What:** New `WaveformMode.spectrogram` with a settings panel similar to LUP's spectrogram settings.
+**Status:** Mel STFT v1 shipped 2026-07-23 (`STFTSpectrogram`, `.stf` cache). Resonate (François ICMC 2025) mothballed in `ResonateSpectrogram.swift` for reference. Remaining: settings panel + LOD controls.
 
-**Target defaults** (from reference screenshot):
+**What:** `WaveformMode.spectrogram` with a settings panel similar to LUP's spectrogram settings.
 
-| Setting | Default |
+**Shipped defaults:**
+
+| Setting | Value |
 |---------|---------|
-| Type | Regular STFT |
+| Type | Regular STFT (Accelerate) |
 | FFT size | 2048 |
 | Window | Blackman |
-| Frequency overlap | None |
-| Time overlap | 4× |
-| Frequency scale | Mel |
-| Color map | Blue → pink |
-| Amplitude range | −120 … 0 dB |
-| Show color map | on |
-| High-quality rendering | on |
-| Reduce quality above | 90 s |
-| Cache size | 200 MB |
+| Time overlap | 4× (hop 512; 1024 above 90 s) |
+| Frequency scale | Mel (96 bands) |
+| Color map | Per waveform theme |
+| Amplitude range | −80 … 0 dB (peak-relative) |
+| Cache | `.stf` sidecar next to sample |
 
-**Approach:**
-1. Add `WaveformMode.spectrogram` alongside chroma/glass/ribbon.
-2. `SpectrogramSettings` struct (UserDefaults-backed, like waveform themes).
-3. Compute STFT in Python during analysis **or** on-demand in Swift via Accelerate vDSP (reuse `WaveformCache` / `.sfc`-style blob).
-4. Render in `WaveformCanvas` as time×frequency heatmap with mel scaling + colormap.
-5. Settings sheet (gear menu on mode picker).
-6. LOD: decimate bins/time for files > 90 s unless high-quality is forced.
-
-**Effort:** ~3–5 days. Can ship v1 with fixed defaults first, then add settings panel.
+**Still todo:**
+1. `SpectrogramSettings` struct (UserDefaults-backed, like waveform themes).
+2. Settings sheet (gear menu on mode picker).
+3. LOD: decimate bins/time for files > 90 s unless high-quality is forced; cache size cap.
+4. Optional: absolute dB floor (−120), window/FFT pickers.
 
 ---
 

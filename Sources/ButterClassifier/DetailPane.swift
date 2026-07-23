@@ -182,7 +182,7 @@ struct DetailPane: View {
             renderModel = quick
 
             if mode == .spectrogram {
-                // Let the list/scan breathe before the heavy Resonate pass.
+                // Let the list/scan breathe before the STFT pass.
                 try? await Task.sleep(nanoseconds: 30_000_000)
                 guard !Task.isCancelled, sample.path == path else { return }
                 let full = await WaveformRenderModel.loadSpectrogram(url: url)
@@ -572,7 +572,7 @@ struct DetailPane: View {
         }
         .pickerStyle(.segmented)
         .labelsHidden()
-        .help("Original / Supersample / Glass / Chroma / Ribbon / Spec (Resonate Mel). Glass/Chroma/Ribbon need Analyze.")
+        .help("Original / Supersample / Glass / Chroma / Ribbon / Spec (Mel STFT). Glass/Chroma/Ribbon need Analyze.")
     }
 
     private var waveformZoomControls: some View {

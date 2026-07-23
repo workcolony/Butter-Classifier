@@ -43,6 +43,8 @@ struct ContentView: View {
     @State private var libraryHydrateProgress: (completed: Int, total: Int)?
     /// True for the whole scan + hydrate window so list rebuilds don't thrash the UI.
     @State private var isLibraryBusy = false
+    @State private var waveformPrecomputeProgress: (completed: Int, total: Int, name: String)?
+    @State private var waveformPrecomputeTask: Task<Void, Never>?
     @State private var bpmOverrideText = ""
     @State private var editorFocused = false
     @State private var keyboardRouter = EditorKeyboardRouter()
@@ -462,6 +464,25 @@ struct ContentView: View {
                         .frame(width: 16)
                     Text("Indexing sidecars…")
                 }
+            } else if let prep = waveformPrecomputeProgress {
+                Text("·")
+                    .foregroundStyle(.tertiary)
+                if prep.total > 0 {
+                    ProgressView(value: Double(prep.completed), total: Double(prep.total))
+                        .frame(width: 120)
+                    Text("Waveforms \(prep.completed)/\(prep.total)")
+                        .monospacedDigit()
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 16)
+                    Text("Caching waveforms…")
+                }
+                if !prep.name.isEmpty {
+                    Text(prep.name)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
             } else if runner.showsAnalyzerStatus {
                 Text("·")
                     .foregroundStyle(.tertiary)
@@ -686,6 +707,10 @@ struct ContentView: View {
                             Button("Analyze Folder") {
                                 enqueueUnanalyzed(inWatchedFolder: folder.path)
                             }
+                            Button("Make Waveforms / Spectrogram") {
+                                startWaveformPrecompute(samplesInFolder: folder.path)
+                            }
+                            .disabled(waveformPrecomputeTask != nil)
                             Button("Reveal in Finder") {
                                 NSWorkspace.shared.activateFileViewerSelecting([folder.url])
                             }
@@ -801,6 +826,21 @@ struct ContentView: View {
 
                 Divider()
 
+                let prepCount = selectedSamples.count
+                Button(prepCount <= 1 ? "Make Waveforms / Spectrogram — Selected" : "Make Waveforms / Spectrogram — Selected (\(prepCount))") {
+                    startWaveformPrecompute(selectedSamples)
+                }
+                .disabled(prepCount == 0 || waveformPrecomputeTask != nil)
+
+                Button("Make Waveforms / Spectrogram — Folder") {
+                    if let folder = selectedFolderPath {
+                        startWaveformPrecompute(samplesInFolder: folder)
+                    }
+                }
+                .disabled(selectedFolderPath == nil || waveformPrecomputeTask != nil)
+
+                Divider()
+
                 Picker("Files in Parallel (max \(safeMaxParallel))", selection: $parallelWorkers) {
                     ForEach(AnalysisSettings.parallelWorkerOptions(), id: \.self) { n in
                         Text("\(n)").tag(n)
@@ -823,13 +863,14 @@ struct ContentView: View {
             }
             .help("Show analyzer output")
 
-            if runner.isRunning {
+            if runner.isRunning || waveformPrecomputeTask != nil {
                 Button {
                     runner.cancelAll()
+                    cancelWaveformPrecompute()
                 } label: {
                     Label("Stop", systemImage: "stop.circle")
                 }
-                .help("Cancel analysis")
+                .help(runner.isRunning ? "Cancel analysis" : "Cancel waveform / spectrogram caching")
             }
         }
     }
@@ -884,6 +925,47 @@ struct ContentView: View {
                 )
             }
         runner.enqueue(files: files)
+    }
+
+    private func startWaveformPrecompute(samplesInFolder folder: String) {
+        let targets = samples
+            .filter { $0.watchedFolderPath == folder }
+            .sorted { $0.path < $1.path }
+        startWaveformPrecompute(targets)
+    }
+
+    private func startWaveformPrecompute(_ targets: [SampleFile]) {
+        let paths = targets.map(\.path)
+        guard !paths.isEmpty else { return }
+        cancelWaveformPrecompute()
+
+        waveformPrecomputeProgress = (completed: 0, total: paths.count, name: "")
+        waveformPrecomputeTask = Task(priority: .utility) {
+            let total = paths.count
+            for (index, path) in paths.enumerated() {
+                guard !Task.isCancelled else { break }
+                let name = URL(fileURLWithPath: path).lastPathComponent
+                await MainActor.run {
+                    waveformPrecomputeProgress = (completed: index, total: total, name: name)
+                }
+                await WaveformCache.shared.precomputeWaveformAndSpectrogram(
+                    for: URL(fileURLWithPath: path)
+                )
+                await MainActor.run {
+                    waveformPrecomputeProgress = (completed: index + 1, total: total, name: name)
+                }
+            }
+            await MainActor.run {
+                waveformPrecomputeProgress = nil
+                waveformPrecomputeTask = nil
+            }
+        }
+    }
+
+    private func cancelWaveformPrecompute() {
+        waveformPrecomputeTask?.cancel()
+        waveformPrecomputeTask = nil
+        waveformPrecomputeProgress = nil
     }
 
     /// Refresh a single sample's cached metrics after its YAML was written.

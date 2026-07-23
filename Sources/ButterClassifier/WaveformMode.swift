@@ -41,7 +41,7 @@ enum WaveformMode: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Mel spectrogram is computed on-demand from audio (Resonate), not from YAML.
+    /// Mel spectrogram is computed on-demand from audio (Accelerate STFT), not from YAML.
     var needsSpectrogram: Bool {
         self == .spectrogram
     }
