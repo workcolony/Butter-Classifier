@@ -21,6 +21,10 @@ The built app is fully self-contained: a relocatable Python runtime (with libros
   - Slice at onsets: cut the file into per-onset WAVs in a `<name>_slices` folder.
   - Normalize: peak-normalize to a target dBFS.
 
+## License
+
+MIT — see [LICENSE](LICENSE).
+
 ## Building
 
 Requirements (build machine only): Xcode, network access for the first build.
