@@ -4,6 +4,20 @@ A native macOS app for managing, analyzing, and editing audio loops and samples.
 
 The built app is fully self-contained: a relocatable Python runtime (with librosa, essentia, scipy, etc.) is bundled inside `ButterClassifier.app`, so end users just launch the app — no Python, Homebrew, or setup required.
 
+## Screenshots
+
+| Mel spectrogram (Spec view) | Super waveform + onsets |
+|---|---|
+| ![Spectrogram Spec view](docs/screenshots/spectrogram-spec.png) | ![Super waveform with onset markers](docs/screenshots/waveform-super-onsets.png) |
+
+| Library browser + batch analyze | PROC effects panel |
+|---|---|
+| ![Chroma view with library table and analysis progress](docs/screenshots/library-chroma-analyze.png) | ![PROC wave-shape routine](docs/screenshots/proc-panel.png) |
+
+| Classify mode + metadata | Tag picker |
+|---|---|
+| ![Classify mode with BPM, LUFS, and Spec view](docs/screenshots/classify-spec.png) | ![Tag assignment picker](docs/screenshots/tag-picker.png) |
+
 ## Features
 
 - **Tags**: read/write `sample.wav_tags.yaml` sidecars (LUP/gold_snds format). Edit tags in the detail pane.
